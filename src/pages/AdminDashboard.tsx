@@ -9,7 +9,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
-import { Users, BookOpen, GraduationCap, ShieldAlert, Plus } from 'lucide-react';
+import { Users, BookOpen, GraduationCap, ShieldAlert, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface AdminDashboardProps {
@@ -237,26 +237,64 @@ export default function AdminDashboard({ activeTab }: AdminDashboardProps) {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {classes.map(cls => (
-            <Card key={cls.id} className="border-none shadow-sm">
+            <Card key={cls.id} className="border-none shadow-sm flex flex-col">
               <CardHeader>
                 <CardTitle className="flex justify-between items-center">
-                  {cls.name}
-                  <Badge>{cls.section}</Badge>
+                  <span>{cls.name}</span>
+                  <Badge variant="outline">{cls.section}</Badge>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 flex-1">
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500">Teacher:</span>
                   <span className="font-medium">{users.find(u => u.uid === cls.teacherId)?.name || 'Unknown'}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">Students:</span>
-                  <span className="font-medium">{cls.studentIds.length} enrolled</span>
+                
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-500">Enrolled Students:</span>
+                    <Badge>{cls.studentIds.length}</Badge>
+                  </div>
+                  
+                  <div className="max-h-32 overflow-y-auto border rounded-lg p-2 bg-slate-50/50">
+                    {cls.studentIds.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic text-center py-2">No students enrolled</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {cls.studentIds.map(sid => {
+                          const student = users.find(u => u.uid === sid);
+                          return (
+                            <div key={sid} className="flex justify-between items-center text-xs bg-white p-1.5 rounded border border-slate-100">
+                              <span>{student?.name || 'Unknown'}</span>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-5 w-5 text-slate-400 hover:text-red-500"
+                                onClick={async () => {
+                                  try {
+                                    await updateDoc(doc(db, 'classes', cls.id), {
+                                      studentIds: cls.studentIds.filter(id => id !== sid)
+                                    });
+                                    toast.success("Student removed from class");
+                                  } catch (error) {
+                                    handleFirestoreError(error, OperationType.UPDATE, `classes/${cls.id}`);
+                                  }
+                                }}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="pt-4 border-t">
-                  <Label className="text-xs uppercase text-slate-400 mb-2 block">Assign Student</Label>
+
+                <div className="pt-4 border-t mt-auto">
+                  <Label className="text-[10px] uppercase font-bold text-slate-400 mb-2 block">Add Student</Label>
                   <Select onValueChange={(val: string) => assignStudentToClass(cls.id, val)}>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-9 text-xs">
                       <SelectValue placeholder="Select Student" />
                     </SelectTrigger>
                     <SelectContent>
