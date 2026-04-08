@@ -1,0 +1,109 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Core user profile for authentication and role management",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "teacher", "student"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "name", "role", "createdAt"]
+    },
+    "StudentProfile": {
+      "title": "Student Profile",
+      "description": "Additional details for students",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "grade": { "type": "string" },
+        "section": { "type": "string" },
+        "parentName": { "type": "string" },
+        "parentContact": { "type": "string" },
+        "address": { "type": "string" }
+      },
+      "required": ["uid", "grade", "section"]
+    },
+    "TeacherProfile": {
+      "title": "Teacher Profile",
+      "description": "Additional details for teachers",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "subjects": { "type": "array", "items": { "type": "string" } },
+        "department": { "type": "string" },
+        "joiningDate": { "type": "string", "format": "date" }
+      },
+      "required": ["uid", "subjects", "department"]
+    },
+    "Class": {
+      "title": "Class",
+      "description": "A group of students assigned to a teacher",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "section": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "studentIds": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["id", "name", "teacherId"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Daily attendance records for a class",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "classId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "records": { "type": "object", "description": "Map of studentId to status (present/absent)" }
+      },
+      "required": ["id", "classId", "date", "records"]
+    },
+    "Grade": {
+      "title": "Grade",
+      "description": "Exam scores for students",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "classId": { "type": "string" },
+        "examName": { "type": "string" },
+        "score": { "type": "number" },
+        "totalScore": { "type": "number" },
+        "date": { "type": "string", "format": "date" }
+      },
+      "required": ["id", "studentId", "classId", "examName", "score", "totalScore"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/students/{uid}": {
+      "schema": "StudentProfile",
+      "description": "Student specific data"
+    },
+    "/teachers/{uid}": {
+      "schema": "TeacherProfile",
+      "description": "Teacher specific data"
+    },
+    "/classes/{classId}": {
+      "schema": "Class",
+      "description": "Class information"
+    },
+    "/attendance/{attendanceId}": {
+      "schema": "Attendance",
+      "description": "Attendance logs"
+    },
+    "/grades/{gradeId}": {
+      "schema": "Grade",
+      "description": "Student grades"
+    }
+  }
+}

@@ -1,0 +1,152 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {uid}
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required)
+    //   - name: string (required)
+    //   - role: string (enum: admin, teacher, student)
+    //   - createdAt: string (ISO 8601)
+    //
+    // Collection: students
+    // Document ID: {uid}
+    // Fields:
+    //   - uid: string (required)
+    //   - grade: string (required)
+    //   - section: string (required)
+    //   - parentName: string (optional)
+    //   - parentContact: string (optional)
+    //   - address: string (optional)
+    //
+    // Collection: teachers
+    // Document ID: {uid}
+    // Fields:
+    //   - uid: string (required)
+    //   - subjects: list (required)
+    //   - department: string (required)
+    //   - joiningDate: string (required)
+    //
+    // Collection: classes
+    // Document ID: {classId}
+    // Fields:
+    //   - id: string (required)
+    //   - name: string (required)
+    //   - section: string (required)
+    //   - teacherId: string (required)
+    //   - studentIds: list (required)
+    //
+    // Collection: attendance
+    // Document ID: {attendanceId}
+    // Fields:
+    //   - id: string (required)
+    //   - classId: string (required)
+    //   - date: string (required)
+    //   - records: map (required)
+    //
+    // Collection: grades
+    // Document ID: {gradeId}
+    // Fields:
+    //   - id: string (required)
+    //   - studentId: string (required)
+    //   - classId: string (required)
+    //   - examName: string (required)
+    //   - score: number (required)
+    //   - totalScore: number (required)
+    //   - date: string (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (getUserData().role == 'admin' || 
+         (request.auth.token.email == "dattabarsha9@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isTeacher() {
+      return isAuthenticated() && getUserData().role == 'teacher';
+    }
+
+    function isStudent() {
+      return isAuthenticated() && getUserData().role == 'student';
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}.*");
+    }
+
+    // ===============================================================
+    // Validation Functions
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'name', 'role', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             data.role in ['admin', 'teacher', 'student'] &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{uid} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (request.resource.data.role != 'admin' || isAdmin());
+      allow update: if isAdmin() || (isOwner(uid) && request.resource.data.role == resource.data.role && isValidUser(request.resource.data));
+    }
+
+    match /students/{uid} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /teachers/{uid} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /classes/{classId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /attendance/{attendanceId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() || isTeacher();
+      allow delete: if isAdmin();
+    }
+
+    match /grades/{gradeId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() || isTeacher();
+      allow delete: if isAdmin();
+    }
+  }
+}
