@@ -78,6 +78,46 @@
         "date": { "type": "string", "format": "date" }
       },
       "required": ["id", "studentId", "classId", "examName", "score", "totalScore"]
+    },
+    "Exam": {
+      "title": "Exam",
+      "description": "Generated exam questions and metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "subject": { "type": "string" },
+        "classId": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "questions": { 
+          "type": "array", 
+          "items": { 
+            "type": "object",
+            "properties": {
+              "question": { "type": "string" },
+              "options": { "type": "array", "items": { "type": "string" } },
+              "correctAnswer": { "type": "string" }
+            }
+          } 
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "subject", "classId", "teacherId", "questions", "createdAt"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "School-wide announcements",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "priority": { "type": "string", "enum": ["low", "medium", "high"] }
+      },
+      "required": ["id", "title", "content", "authorId", "authorName", "createdAt", "priority"]
     }
   },
   "firestore": {
@@ -104,6 +144,14 @@
     "/grades/{gradeId}": {
       "schema": "Grade",
       "description": "Student grades"
+    },
+    "/exams/{examId}": {
+      "schema": "Exam",
+      "description": "Generated exams"
+    },
+    "/announcements/{announcementId}": {
+      "schema": "Announcement",
+      "description": "School-wide announcements"
     }
   }
 }

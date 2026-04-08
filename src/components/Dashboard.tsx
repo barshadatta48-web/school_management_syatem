@@ -10,8 +10,10 @@ import {
   LogOut,
   Menu,
   X,
+  Calendar,
   Settings,
-  Bell
+  Bell,
+  BrainCircuit
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import AdminDashboard from '../pages/AdminDashboard';
@@ -32,6 +34,11 @@ export default function Dashboard({ user }: DashboardProps) {
     { id: 'classes', label: 'Classes', icon: BookOpen, roles: ['admin', 'teacher'] },
     { id: 'attendance', label: 'Attendance', icon: CalendarCheck, roles: ['admin', 'teacher', 'student'] },
     { id: 'grades', label: 'Grades', icon: GraduationCap, roles: ['admin', 'teacher', 'student'] },
+    { id: 'exams', label: 'Exams', icon: BrainCircuit, roles: ['teacher', 'student'] },
+    { id: 'schedule', label: 'Schedule', icon: Calendar, roles: ['student'] },
+    { id: 'resources', label: 'Resources', icon: BookOpen, roles: ['student'] },
+    { id: 'students', label: 'My Students', icon: Users, roles: ['teacher'] },
+    { id: 'profile', label: 'Profile', icon: Settings, roles: ['admin', 'teacher', 'student'] },
   ];
 
   const filteredMenu = menuItems.filter(item => item.roles.includes(user.role));

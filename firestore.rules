@@ -80,16 +80,20 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && 
-        (getUserData().role == 'admin' || 
-         (request.auth.token.email == "dattabarsha9@gmail.com" && request.auth.token.email_verified == true));
+        ((request.auth.token.email == "dattabarsha9@gmail.com" && request.auth.token.email_verified == true) ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'admin'));
     }
 
     function isTeacher() {
-      return isAuthenticated() && getUserData().role == 'teacher';
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             getUserData().role == 'teacher';
     }
 
     function isStudent() {
-      return isAuthenticated() && getUserData().role == 'student';
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             getUserData().role == 'student';
     }
 
     function isValidEmail(email) {
@@ -147,6 +151,17 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create, update: if isAdmin() || isTeacher();
       allow delete: if isAdmin();
+    }
+
+    match /exams/{examId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() || isTeacher();
+      allow delete: if isAdmin();
+    }
+
+    match /announcements/{announcementId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
     }
   }
 }
