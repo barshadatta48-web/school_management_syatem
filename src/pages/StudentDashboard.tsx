@@ -764,29 +764,33 @@ export default function StudentDashboard({ activeTab, user }: StudentDashboardPr
                         )}
                         style={{ top: `${timeIdx * 100 + 4}px`, height: '92px' }}
                       >
-                        <div className="flex justify-between items-start">
-                          <div className="flex items-center gap-1 mb-1">
-                            <Clock className="h-2.5 w-2.5" />
-                            <span className="text-[9px] font-medium opacity-70">{entry.time}</span>
-                          </div>
-                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button 
-                              onClick={() => {
-                                setEditingSchedule(entry);
-                                setScheduleForm(entry);
-                                setIsScheduleDialogOpen(true);
-                              }}
-                              className="p-1 hover:bg-black/5 rounded"
-                            >
-                              <Edit2 className="h-2.5 w-2.5" />
-                            </button>
-                            <button 
-                              onClick={() => handleDeleteSchedule(entry.id)}
-                              className="p-1 hover:bg-red-100 text-red-500 rounded"
-                            >
-                              <Trash2 className="h-2.5 w-2.5" />
-                            </button>
-                          </div>
+                        <div className="absolute top-1 right-1 flex gap-1 items-center z-20">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingSchedule(entry);
+                              setScheduleForm(entry);
+                              setIsScheduleDialogOpen(true);
+                            }}
+                            className="p-1 bg-white/90 hover:bg-white rounded shadow-sm text-slate-600 hover:text-primary transition-all border border-slate-200/50"
+                            title="Edit"
+                          >
+                            <Edit2 className="h-3 w-3" />
+                          </button>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteSchedule(entry.id);
+                            }}
+                            className="p-1 bg-white/90 hover:bg-red-50 rounded shadow-sm text-red-500 hover:text-red-600 transition-all border border-slate-200/50"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-1 mb-1">
+                          <Clock className="h-2.5 w-2.5" />
+                          <span className="text-[9px] font-medium opacity-70">{entry.time}</span>
                         </div>
                         <h4 className="font-bold text-[10px] leading-tight mb-0.5">{entry.title}</h4>
                         <div className="space-y-0.5">

@@ -56,13 +56,16 @@ function AppContent() {
               }
             }
           } else {
-            // New user - default to student or check if admin email
+            // New user - check if there's a pending role from registration
+            const pendingRole = localStorage.getItem('pending_role') as 'admin' | 'teacher' | 'student' | null;
+            localStorage.removeItem('pending_role');
+            
             const isAdmin = firebaseUser.email === 'dattabarsha9@gmail.com';
             const newUser: UserProfile = {
               uid: firebaseUser.uid,
               email: firebaseUser.email || '',
-              name: firebaseUser.displayName || 'Anonymous',
-              role: isAdmin ? 'admin' : 'student',
+              name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Anonymous',
+              role: isAdmin ? 'admin' : (pendingRole || 'student'),
               createdAt: new Date().toISOString(),
               photoURL: firebaseUser.photoURL || undefined,
             };

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { loginWithGoogle, loginWithEmail, UserProfile } from '../lib/firebase';
+import { loginWithGoogle, loginWithEmail, registerWithEmail, UserProfile } from '../lib/firebase';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -14,6 +14,7 @@ interface LoginProps {
 
 export default function Login({ onMockLogin }: LoginProps) {
   const [loading, setLoading] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'admin' | 'teacher' | 'student'>('student');
@@ -39,13 +40,24 @@ export default function Login({ onMockLogin }: LoginProps) {
 
     setLoading(true);
     try {
-      await loginWithEmail(email, password);
-      toast.success("Successfully logged in!");
-    } catch (error: any) {
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        toast.error("Invalid email or password. For demo purposes, you can use the Mock Login below.");
+      if (isSignUp) {
+        localStorage.setItem('pending_role', role);
+        await registerWithEmail(email, password);
+        toast.success("Account created successfully!");
       } else {
-        toast.error("Login failed. Please try again.");
+        await loginWithEmail(email, password);
+        toast.success("Successfully logged in!");
+      }
+    } catch (error: any) {
+      console.error("Auth error:", error);
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        toast.error("Invalid email or password. If you don't have an account, please Sign Up first.");
+      } else if (error.code === 'auth/email-already-in-use') {
+        toast.error("Email already in use. Try logging in instead.");
+      } else if (error.code === 'auth/weak-password') {
+        toast.error("Password should be at least 6 characters.");
+      } else {
+        toast.error(isSignUp ? "Registration failed. Please try again." : "Login failed. Please try again.");
       }
     } finally {
       setLoading(false);
@@ -112,6 +124,26 @@ export default function Login({ onMockLogin }: LoginProps) {
                 />
               </div>
             </div>
+
+            {isSignUp && (
+              <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                <Label>Select Your Role</Label>
+                <Select value={role} onValueChange={(val: any) => setRole(val)}>
+                  <SelectTrigger className="w-full h-11">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="h-4 w-4 text-slate-400" />
+                      <SelectValue placeholder="Select a role" />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Administrator</SelectItem>
+                    <SelectItem value="teacher">Teacher</SelectItem>
+                    <SelectItem value="student">Student</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <Button 
               type="submit"
               disabled={loading}
@@ -122,11 +154,21 @@ export default function Login({ onMockLogin }: LoginProps) {
               ) : (
                 <>
                   <LogIn className="mr-2 h-4 w-4" />
-                  Sign In
+                  {isSignUp ? 'Create Account' : 'Sign In'}
                 </>
               )}
             </Button>
           </form>
+
+          <div className="text-center">
+            <button 
+              type="button"
+              onClick={() => setIsSignUp(!isSignUp)}
+              className="text-sm text-primary hover:underline font-medium"
+            >
+              {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+            </button>
+          </div>
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
