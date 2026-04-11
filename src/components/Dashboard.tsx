@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { UserProfile, logout } from '../lib/firebase';
-import { Button } from './ui/button';
+import { Button, buttonVariants } from './ui/button';
 import { 
   LayoutDashboard, 
   Users, 
@@ -13,7 +13,10 @@ import {
   Calendar,
   Settings,
   Bell,
-  BrainCircuit
+  BrainCircuit,
+  User,
+  Shield,
+  Lock
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -21,6 +24,15 @@ import AdminDashboard from '../pages/AdminDashboard';
 import TeacherDashboard from '../pages/TeacherDashboard';
 import StudentDashboard from '../pages/StudentDashboard';
 import SettingsManagement from './SettingsManagement';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 
 interface DashboardProps {
   user: UserProfile;
@@ -39,6 +51,7 @@ export default function Dashboard({ user }: DashboardProps) {
   };
 
   const [activeTab, setActiveTab] = useState(getActiveTabFromPath());
+  const [settingsTab, setSettingsTab] = useState('profile');
 
   useEffect(() => {
     setActiveTab(getActiveTabFromPath());
@@ -74,7 +87,7 @@ export default function Dashboard({ user }: DashboardProps) {
 
   const renderContent = () => {
     if (activeTab === 'settings') {
-      return <SettingsManagement user={user} />;
+      return <SettingsManagement user={user} activeTab={settingsTab} />;
     }
 
     switch (user.role) {
@@ -155,31 +168,73 @@ export default function Dashboard({ user }: DashboardProps) {
             {activeTab.replace('-', ' ')}
           </h2>
           <div className="flex items-center gap-4">
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className={cn("text-slate-500", activeTab === 'settings' && "text-primary bg-primary/10")}
-              onClick={() => onTabClick('settings')}
-            >
-              <Settings className="h-5 w-5" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger 
+                render={
+                  <button 
+                    type="button"
+                    className={cn(
+                      buttonVariants({ variant: "ghost", size: "icon" }),
+                      "text-slate-500", 
+                      activeTab === 'settings' && (settingsTab === 'preferences' || settingsTab === 'security') && "text-primary bg-primary/10"
+                    )}
+                  >
+                    <Settings className="h-5 w-5" />
+                  </button>
+                }
+              />
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>Settings</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => { setSettingsTab('preferences'); onTabClick('settings'); }}>
+                    <Bell className="mr-2 h-4 w-4" />
+                    <span>Preferences</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => { setSettingsTab('security'); onTabClick('settings'); }}>
+                    <Shield className="mr-2 h-4 w-4" />
+                    <span>Security</span>
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <div className="h-8 w-px bg-slate-200 mx-2" />
-            <div 
-              className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 p-1.5 rounded-lg transition-colors"
-              onClick={() => onTabClick('settings')}
-            >
-              <div className="text-right hidden sm:block">
-                <p className="text-sm font-medium text-slate-900">{user.name}</p>
-                <p className="text-xs text-slate-500 capitalize">{user.role}</p>
-              </div>
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold overflow-hidden border border-slate-200">
-                {user.photoURL ? (
-                  <img src={user.photoURL} alt={user.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
-                ) : (
-                  user.name.charAt(0)
-                )}
-              </div>
-            </div>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger 
+                render={
+                  <button type="button" className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 p-1.5 rounded-lg transition-colors outline-none">
+                    <div className="text-right hidden sm:block">
+                      <p className="text-sm font-medium text-slate-900">{user.name}</p>
+                      <p className="text-xs text-slate-500 capitalize">{user.role}</p>
+                    </div>
+                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold overflow-hidden border border-slate-200">
+                      {user.photoURL ? (
+                        <img src={user.photoURL} alt={user.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                      ) : (
+                        user.name.charAt(0)
+                      )}
+                    </div>
+                  </button>
+                }
+              />
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => { setSettingsTab('profile'); onTabClick('settings'); }}>
+                    <User className="mr-2 h-4 w-4" />
+                    <span>Profile</span>
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={logout} className="text-red-600 focus:text-red-600 focus:bg-red-50">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Logout</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </header>
 

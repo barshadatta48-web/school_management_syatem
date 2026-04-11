@@ -1,16 +1,19 @@
 import { useState, useEffect } from 'react';
-import { db, UserProfile, OperationType, handleFirestoreError, GradeRecord, AttendanceRecord, Exam, ClassData, Announcement } from '../lib/firebase';
-import { collection, query, where, onSnapshot, orderBy, setDoc, doc } from 'firebase/firestore';
+import { db, UserProfile, OperationType, handleFirestoreError, GradeRecord, AttendanceRecord, Exam, ClassData, Announcement, ScheduleEntry } from '../lib/firebase';
+import { collection, query, where, onSnapshot, orderBy, setDoc, doc, deleteDoc } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Badge } from '../components/ui/badge';
-import { Button } from '../components/ui/button';
+import { Button, buttonVariants } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { toast } from 'sonner';
-import { GraduationCap, Calendar, TrendingUp, BookOpen, Megaphone, Clock, ExternalLink, Users, BrainCircuit, CalendarCheck } from 'lucide-react';
+import { GraduationCap, Calendar, TrendingUp, BookOpen, Megaphone, Clock, ExternalLink, Users, BrainCircuit, CalendarCheck, Plus, Trash2, Edit2, MapPin, User, Check, X } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { cn } from '../lib/utils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Textarea } from '../components/ui/textarea';
 
 import ProfileManagement from '../components/ProfileManagement';
 
@@ -25,10 +28,23 @@ export default function StudentDashboard({ activeTab, user }: StudentDashboardPr
   const [exams, setExams] = useState<Exam[]>([]);
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [schedules, setSchedules] = useState<ScheduleEntry[]>([]);
 
   const [activeExam, setActiveExam] = useState<Exam | null>(null);
   const [examAnswers, setExamAnswers] = useState<Record<number, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [isScheduleDialogOpen, setIsScheduleDialogOpen] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState<ScheduleEntry | null>(null);
+  const [scheduleForm, setScheduleForm] = useState<Partial<ScheduleEntry>>({
+    day: 'Monday',
+    time: '09:00 AM',
+    type: 'class',
+    title: '',
+    location: '',
+    teacherName: '',
+    description: ''
+  });
 
   useEffect(() => {
     const gradesQ = query(collection(db, 'grades'), where('studentId', '==', user.uid));
@@ -60,10 +76,18 @@ export default function StudentDashboard({ activeTab, user }: StudentDashboardPr
       handleFirestoreError(error, OperationType.LIST, 'classes');
     });
 
+    const schedulesQ = query(collection(db, 'schedules'), where('studentId', '==', user.uid));
+    const unsubscribeSchedules = onSnapshot(schedulesQ, (snapshot) => {
+      setSchedules(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ScheduleEntry)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'schedules');
+    });
+
     return () => {
       unsubscribeGrades();
       unsubscribeAttendance();
       unsubscribeClasses();
+      unsubscribeSchedules();
       announcementsUnsubscribe();
     };
   }, [user.uid]);
@@ -112,6 +136,55 @@ export default function StudentDashboard({ activeTab, user }: StudentDashboardPr
       toast.error("Failed to submit exam");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleSaveSchedule = async () => {
+    if (!scheduleForm.title || !scheduleForm.day || !scheduleForm.time) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    try {
+      const id = editingSchedule?.id || doc(collection(db, 'schedules')).id;
+      const newEntry: ScheduleEntry = {
+        id,
+        studentId: user.uid,
+        day: scheduleForm.day as any,
+        time: scheduleForm.time!,
+        title: scheduleForm.title!,
+        type: scheduleForm.type as any,
+        location: scheduleForm.location || '',
+        teacherName: scheduleForm.teacherName || '',
+        description: scheduleForm.description || ''
+      };
+
+      await setDoc(doc(db, 'schedules', id), newEntry);
+      toast.success(editingSchedule ? "Schedule updated" : "Schedule added");
+      setIsScheduleDialogOpen(false);
+      setEditingSchedule(null);
+      setScheduleForm({
+        day: 'Monday',
+        time: '09:00 AM',
+        type: 'class',
+        title: '',
+        location: '',
+        teacherName: '',
+        description: ''
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'schedules');
+      toast.error("Failed to save schedule");
+    }
+  };
+
+  const handleDeleteSchedule = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'schedules', id));
+      toast.success("Schedule entry deleted");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `schedules/${id}`);
+      toast.error("Failed to delete schedule");
     }
   };
 
@@ -475,16 +548,15 @@ export default function StudentDashboard({ activeTab, user }: StudentDashboardPr
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Student Name</TableHead>
-                  <TableHead>Class</TableHead>
+                  <TableHead>Subject Name</TableHead>
                   <TableHead>Date</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead className="text-center">Present/Absent</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {attendance.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-12 text-slate-500">
+                    <TableCell colSpan={3} className="text-center py-12 text-slate-500">
                       <Calendar className="h-12 w-12 text-slate-200 mx-auto mb-4" />
                       No attendance records found.
                     </TableCell>
@@ -495,15 +567,22 @@ export default function StudentDashboard({ activeTab, user }: StudentDashboardPr
                     const status = record.records[user.uid];
                     return (
                       <TableRow key={record.id}>
-                        <TableCell className="font-medium">{user.name}</TableCell>
-                        <TableCell>{cls?.name || 'Unknown Class'}</TableCell>
+                        <TableCell className="font-medium">{cls?.name || 'Unknown Class'}</TableCell>
                         <TableCell>
                           {new Date(record.date).toLocaleDateString(undefined, { dateStyle: 'medium' })}
                         </TableCell>
-                        <TableCell>
-                          <Badge variant={status === 'present' ? 'default' : 'destructive'} className="capitalize">
-                            {status}
-                          </Badge>
+                        <TableCell className="text-center">
+                          <div className="flex justify-center">
+                            {status === 'present' ? (
+                              <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center text-green-600">
+                                <Check className="h-5 w-5" />
+                              </div>
+                            ) : (
+                              <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center text-red-600">
+                                <X className="h-5 w-5" />
+                              </div>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -518,52 +597,222 @@ export default function StudentDashboard({ activeTab, user }: StudentDashboardPr
   }
 
   if (activeTab === 'schedule') {
-    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-    const timeSlots = ['09:00 AM', '10:30 AM', '12:00 PM', '01:30 PM', '03:00 PM'];
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const timeSlots = ['08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'];
 
     return (
       <div className="space-y-6">
         <div className="flex justify-between items-center">
-          <h3 className="text-xl font-bold">Weekly Schedule</h3>
-          <Badge variant="outline" className="bg-white">Current Semester</Badge>
+          <div>
+            <h3 className="text-xl font-bold">Weekly Schedule</h3>
+            <p className="text-sm text-slate-500">Manage your classes, exams, and study times</p>
+          </div>
+          <Dialog open={isScheduleDialogOpen} onOpenChange={setIsScheduleDialogOpen}>
+            <DialogTrigger 
+              render={
+                <button 
+                  type="button"
+                  className={cn(
+                    buttonVariants({ variant: "default" }),
+                    "gap-2"
+                  )}
+                  onClick={() => {
+                    setEditingSchedule(null);
+                    setScheduleForm({ day: 'Monday', time: '09:00 AM', type: 'class', title: '', location: '', teacherName: '', description: '' });
+                  }}
+                >
+                  <Plus className="h-4 w-4" /> Add Entry
+                </button>
+              }
+            >
+              <Plus className="h-4 w-4" /> Add Entry
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{editingSchedule ? 'Edit Schedule Entry' : 'Add New Schedule Entry'}</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="title" className="text-right">Sub</Label>
+                  <Input 
+                    id="title" 
+                    className="col-span-3" 
+                    value={scheduleForm.title} 
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, title: e.target.value })}
+                    placeholder="e.g. Math, Physics"
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="teacherName" className="text-right">Teacher</Label>
+                  <Input 
+                    id="teacherName" 
+                    className="col-span-3" 
+                    value={scheduleForm.teacherName} 
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, teacherName: e.target.value })}
+                    placeholder="e.g. Dr. Smith"
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label className="text-right">Day</Label>
+                  <Select 
+                    value={scheduleForm.day} 
+                    onValueChange={(val) => setScheduleForm({ ...scheduleForm, day: val as any })}
+                  >
+                    <SelectTrigger className="col-span-3">
+                      <SelectValue placeholder="Select day" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {days.map(day => (
+                        <SelectItem key={day} value={day}>{day}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label className="text-right">Time</Label>
+                  <Select 
+                    value={scheduleForm.time} 
+                    onValueChange={(val) => setScheduleForm({ ...scheduleForm, time: val })}
+                  >
+                    <SelectTrigger className="col-span-3">
+                      <SelectValue placeholder="Select time" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {timeSlots.map(slot => (
+                        <SelectItem key={slot} value={slot}>{slot}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label className="text-right">Type</Label>
+                  <Select 
+                    value={scheduleForm.type} 
+                    onValueChange={(val) => setScheduleForm({ ...scheduleForm, type: val as any })}
+                  >
+                    <SelectTrigger className="col-span-3">
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="class">Class</SelectItem>
+                      <SelectItem value="exam">Exam</SelectItem>
+                      <SelectItem value="study">Study</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="location" className="text-right">Room no.</Label>
+                  <Input 
+                    id="location" 
+                    className="col-span-3" 
+                    value={scheduleForm.location} 
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, location: e.target.value })}
+                    placeholder="e.g. 101, 202"
+                  />
+                </div>
+                {scheduleForm.type === 'other' && (
+                  <div className="grid grid-cols-4 items-start gap-4">
+                    <Label htmlFor="description" className="text-right pt-2">Bio / Notes</Label>
+                    <Textarea 
+                      id="description" 
+                      className="col-span-3 min-h-[80px]" 
+                      value={scheduleForm.description} 
+                      onChange={(e) => setScheduleForm({ ...scheduleForm, description: e.target.value })}
+                      placeholder="Type your notes or description here..."
+                    />
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsScheduleDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleSaveSchedule}>Save Entry</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-          <div className="hidden md:block pt-12 space-y-12">
-            {timeSlots.map(slot => (
-              <div key={slot} className="text-[10px] font-bold text-slate-400 uppercase text-right pr-4">
-                {slot}
+        <div className="overflow-x-auto pb-4">
+          <div className="min-w-[800px] grid grid-cols-8 gap-4">
+            <div className="pt-12 space-y-0">
+              {timeSlots.map(slot => (
+                <div key={slot} className="h-[100px] flex items-start justify-end pr-4">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">{slot}</span>
+                </div>
+              ))}
+            </div>
+            
+            {days.map((day) => (
+              <div key={day} className="space-y-4">
+                <div className="text-center font-bold text-sm text-slate-600 pb-2 border-b border-slate-200">
+                  {day}
+                </div>
+                <div className="relative h-[1000px] bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                  {schedules.filter(s => s.day === day).map((entry) => {
+                    const timeIdx = timeSlots.indexOf(entry.time);
+                    if (timeIdx === -1) return null;
+                    
+                    return (
+                      <div 
+                        key={entry.id} 
+                        className={cn(
+                          "absolute left-1 right-1 p-2 rounded-lg border shadow-sm group transition-all hover:scale-[1.02] z-10 overflow-hidden",
+                          entry.type === 'class' ? "bg-blue-50 border-blue-100 text-blue-700" :
+                          entry.type === 'exam' ? "bg-red-50 border-red-100 text-red-700" :
+                          entry.type === 'study' ? "bg-purple-50 border-purple-100 text-purple-700" :
+                          "bg-slate-50 border-slate-100 text-slate-700"
+                        )}
+                        style={{ top: `${timeIdx * 100 + 4}px`, height: '92px' }}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-center gap-1 mb-1">
+                            <Clock className="h-2.5 w-2.5" />
+                            <span className="text-[9px] font-medium opacity-70">{entry.time}</span>
+                          </div>
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button 
+                              onClick={() => {
+                                setEditingSchedule(entry);
+                                setScheduleForm(entry);
+                                setIsScheduleDialogOpen(true);
+                              }}
+                              className="p-1 hover:bg-black/5 rounded"
+                            >
+                              <Edit2 className="h-2.5 w-2.5" />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteSchedule(entry.id)}
+                              className="p-1 hover:bg-red-100 text-red-500 rounded"
+                            >
+                              <Trash2 className="h-2.5 w-2.5" />
+                            </button>
+                          </div>
+                        </div>
+                        <h4 className="font-bold text-[10px] leading-tight mb-0.5">{entry.title}</h4>
+                        <div className="space-y-0.5">
+                          {entry.teacherName && (
+                            <p className="text-[9px] opacity-70 flex items-center gap-1">
+                              <User className="h-2 w-2" /> {entry.teacherName}
+                            </p>
+                          )}
+                          {entry.location && (
+                            <p className="text-[9px] opacity-70 flex items-center gap-1">
+                              <MapPin className="h-2 w-2" /> Room {entry.location}
+                            </p>
+                          )}
+                          {entry.description && (
+                            <p className="text-[8px] opacity-60 italic line-clamp-1 mt-0.5">
+                              {entry.description}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             ))}
           </div>
-          
-          {days.map((day, dIdx) => (
-            <div key={day} className="space-y-4">
-              <div className="text-center font-bold text-sm text-slate-600 pb-2 border-b border-slate-200">
-                {day}
-              </div>
-              <div className="space-y-3">
-                {classes.map((cls, cIdx) => {
-                  // Mocking a schedule based on class index and day
-                  const isVisible = (cIdx + dIdx) % 3 === 0;
-                  if (!isVisible) return null;
-                  
-                  return (
-                    <div key={cls.id} className="p-3 bg-white rounded-xl border border-slate-100 shadow-sm hover:border-primary/30 transition-colors">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Clock className="h-3 w-3 text-primary" />
-                        <span className="text-[10px] font-medium text-slate-500">
-                          {timeSlots[(cIdx + dIdx) % 5]}
-                        </span>
-                      </div>
-                      <h4 className="font-bold text-xs line-clamp-1">{cls.name}</h4>
-                      <p className="text-[10px] text-slate-400">Room {101 + cIdx}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
         </div>
       </div>
     );
@@ -631,17 +880,16 @@ export default function StudentDashboard({ activeTab, user }: StudentDashboardPr
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Exam Name</TableHead>
-                  <TableHead>Subject</TableHead>
-                  <TableHead>Score</TableHead>
+                  <TableHead>Subject Name</TableHead>
+                  <TableHead>Grade</TableHead>
                   <TableHead>Percentage</TableHead>
-                  <TableHead>Date</TableHead>
+                  <TableHead>Result</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {grades.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-12 text-slate-500">
+                    <TableCell colSpan={4} className="text-center py-12 text-slate-500">
                       <GraduationCap className="h-12 w-12 text-slate-200 mx-auto mb-4" />
                       No grades recorded yet.
                     </TableCell>
@@ -652,16 +900,17 @@ export default function StudentDashboard({ activeTab, user }: StudentDashboardPr
                     const percentage = Math.round((grade.score / grade.totalScore) * 100);
                     return (
                       <TableRow key={grade.id}>
-                        <TableCell className="font-medium">{grade.examName}</TableCell>
-                        <TableCell>{cls?.name || 'Unknown'}</TableCell>
+                        <TableCell className="font-medium">{cls?.name || 'Unknown'}</TableCell>
                         <TableCell>{grade.score} / {grade.totalScore}</TableCell>
                         <TableCell>
                           <Badge variant={percentage >= 70 ? 'default' : 'destructive'}>
                             {percentage}%
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-slate-500">
-                          {new Date(grade.date).toLocaleDateString()}
+                        <TableCell>
+                          <Badge variant="outline" className="text-blue-600 bg-blue-50 border-blue-200">
+                            {grade.examName || 'Final Result'}
+                          </Badge>
                         </TableCell>
                       </TableRow>
                     );

@@ -30,7 +30,7 @@ import {
   writeBatch 
 } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
-import { Button } from './ui/button';
+import { Button, buttonVariants } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { cn } from '../lib/utils';
@@ -250,7 +250,17 @@ export default function NotificationsPage() {
                           })}
                         </span>
                         <DropdownMenu>
-                          <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400" />}>
+                          <DropdownMenuTrigger 
+                            render={
+                              <button 
+                                type="button"
+                                className={cn(
+                                  buttonVariants({ variant: "ghost", size: "icon" }),
+                                  "h-8 w-8 text-slate-400"
+                                )}
+                              />
+                            }
+                          >
                             <MoreVertical className="h-4 w-4" />
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">

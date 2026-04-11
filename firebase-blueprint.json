@@ -118,6 +118,23 @@
         "priority": { "type": "string", "enum": ["low", "medium", "high"] }
       },
       "required": ["id", "title", "content", "authorId", "authorName", "createdAt", "priority"]
+    },
+    "Schedule": {
+      "title": "Schedule",
+      "description": "Student's personal weekly schedule entries",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "day": { "type": "string", "enum": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] },
+        "time": { "type": "string", "description": "Time slot (e.g., 09:00 AM)" },
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["class", "exam", "study", "other"] },
+        "location": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "required": ["id", "studentId", "day", "time", "title", "type"]
     }
   },
   "firestore": {
@@ -152,6 +169,10 @@
     "/announcements/{announcementId}": {
       "schema": "Announcement",
       "description": "School-wide announcements"
+    },
+    "/schedules/{scheduleId}": {
+      "schema": "Schedule",
+      "description": "Student personal schedules"
     }
   }
 }

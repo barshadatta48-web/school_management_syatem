@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Label } from './ui/label';
 import { Switch } from './ui/switch';
@@ -24,9 +24,16 @@ import { UserProfile } from '../lib/firebase';
 
 interface SettingsManagementProps {
   user: UserProfile;
+  activeTab?: string;
 }
 
-export default function SettingsManagement({ user }: SettingsManagementProps) {
+export default function SettingsManagement({ user, activeTab = "profile" }: SettingsManagementProps) {
+  const [currentTab, setCurrentTab] = useState(activeTab);
+
+  useEffect(() => {
+    setCurrentTab(activeTab);
+  }, [activeTab]);
+
   const [notifications, setNotifications] = useState({
     email: true,
     push: false,
@@ -53,7 +60,7 @@ export default function SettingsManagement({ user }: SettingsManagementProps) {
         </div>
       </div>
 
-      <Tabs defaultValue="profile" className="w-full">
+      <Tabs value={currentTab} onValueChange={setCurrentTab} className="w-full">
         <TabsList className="mb-8">
           <TabsTrigger value="profile" className="gap-2">
             <User className="h-4 w-4" />

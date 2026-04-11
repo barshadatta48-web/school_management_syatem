@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react';
 import { db, UserProfile, OperationType, handleFirestoreError, ClassData, Announcement, AttendanceRecord, GradeRecord, Exam, sendNotification } from '../lib/firebase';
-import { collection, query, onSnapshot, updateDoc, doc, addDoc, getDocs, deleteDoc, orderBy } from 'firebase/firestore';
+import { collection, query, onSnapshot, updateDoc, doc, addDoc, getDocs, deleteDoc, orderBy, setDoc } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Button } from '../components/ui/button';
+import { Button, buttonVariants } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
-import { Users, BookOpen, GraduationCap, ShieldAlert, Plus, X, Megaphone, Trash2, Search, CalendarCheck, Calendar, BrainCircuit, CheckCircle2, XCircle, HelpCircle, ArrowLeft, Clock, Eye } from 'lucide-react';
+import { Users, BookOpen, GraduationCap, ShieldAlert, Plus, X, Megaphone, Trash2, Search, CalendarCheck, Calendar, BrainCircuit, CheckCircle2, XCircle, HelpCircle, ArrowLeft, Clock, Eye, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -44,6 +44,10 @@ export default function AdminDashboard({ activeTab, user }: AdminDashboardProps)
   // Detailed Attendance State
   const [selectedAttendanceClass, setSelectedAttendanceClass] = useState<string | null>(null);
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Detailed Grades State
+  const [selectedGradeClass, setSelectedGradeGradeClass] = useState<string | null>(null);
+  const [totalScore, setTotalScore] = useState(100);
 
   useEffect(() => {
     const usersUnsubscribe = onSnapshot(query(collection(db, 'users')), (snapshot) => {
@@ -180,6 +184,69 @@ export default function AdminDashboard({ activeTab, user }: AdminDashboardProps)
     }
   };
 
+  const submitGrade = async (studentId: string, classId: string, score: number) => {
+    const gradeId = `grade_${classId}_${studentId}_${Date.now()}`;
+    try {
+      await setDoc(doc(db, 'grades', gradeId), {
+        id: gradeId,
+        studentId,
+        classId,
+        examName: 'Final Result', // Default name as requested to remove option
+        score,
+        totalScore,
+        date: new Date().toISOString()
+      });
+
+      await sendNotification({
+        userId: studentId,
+        title: 'New Grade Posted',
+        message: `Your exam result has been posted: ${score}/${totalScore}`,
+        type: 'success'
+      });
+
+      toast.success("Grade submitted");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `grades/${gradeId}`);
+    }
+  };
+
+  const markAttendance = async (studentId: string, classId: string, status: 'present' | 'absent') => {
+    const attendanceId = `${classId}_${attendanceDate}`;
+    try {
+      const attendanceRef = doc(db, 'attendance', attendanceId);
+      await setDoc(attendanceRef, {
+        id: attendanceId,
+        classId,
+        date: attendanceDate,
+        records: { [studentId]: status }
+      }, { merge: true });
+      toast.success(`Marked ${status}`);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `attendance/${attendanceId}`);
+    }
+  };
+
+  const markAllPresent = async (classId: string, studentIds: string[]) => {
+    const attendanceId = `${classId}_${attendanceDate}`;
+    const records: Record<string, 'present' | 'absent'> = {};
+    studentIds.forEach(sid => {
+      records[sid] = 'present';
+    });
+
+    try {
+      const attendanceRef = doc(db, 'attendance', attendanceId);
+      await setDoc(attendanceRef, {
+        id: attendanceId,
+        classId,
+        date: attendanceDate,
+        records
+      }, { merge: true });
+      toast.success("Marked all present");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `attendance/${attendanceId}`);
+    }
+  };
+
   const deleteAnnouncement = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'announcements', id));
@@ -284,7 +351,18 @@ export default function AdminDashboard({ activeTab, user }: AdminDashboardProps)
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Announcements</CardTitle>
                 <Dialog open={isAnnounceDialogOpen} onOpenChange={setIsAnnounceDialogOpen}>
-                  <DialogTrigger render={<Button size="sm" variant="outline" />}>
+                  <DialogTrigger 
+                    render={
+                      <button 
+                        type="button"
+                        className={cn(
+                          buttonVariants({ variant: "outline", size: "sm" })
+                        )}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    }
+                  >
                     <Plus className="h-4 w-4" />
                   </DialogTrigger>
                 <DialogContent>
@@ -458,7 +536,18 @@ export default function AdminDashboard({ activeTab, user }: AdminDashboardProps)
         <div className="flex justify-between items-center">
           <h3 className="text-xl font-bold">Manage Classes</h3>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger render={<Button />}>
+            <DialogTrigger 
+              render={
+                <button 
+                  type="button"
+                  className={cn(
+                    buttonVariants({ variant: "default" })
+                  )}
+                >
+                  <Plus className="h-4 w-4 mr-2" /> Create Class
+                </button>
+              }
+            >
               <Plus className="h-4 w-4 mr-2" /> Create Class
             </DialogTrigger>
             <DialogContent>
@@ -582,18 +671,11 @@ export default function AdminDashboard({ activeTab, user }: AdminDashboardProps)
       const stats = {
         present: record ? Object.values(record.records).filter(s => s === 'present').length : 0,
         absent: record ? Object.values(record.records).filter(s => s === 'absent').length : 0,
-        noRecord: (cls?.studentIds.length || 0) - (record ? Object.values(record.records).length : 0)
+        noRecord: (cls?.studentIds.length || 0) - (record ? Object.keys(record.records).length : 0)
       };
 
       return (
         <div className="space-y-6">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" onClick={() => setSelectedAttendanceClass(null)}>
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Overview
-            </Button>
-          </div>
-
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card className="border-none shadow-sm bg-green-50">
               <CardContent className="pt-6">
@@ -631,26 +713,46 @@ export default function AdminDashboard({ activeTab, user }: AdminDashboardProps)
           </div>
 
           <Card className="border-none shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <CardTitle>Detailed Attendance: {cls?.name}</CardTitle>
-                <CardDescription>Section {cls?.section} - {new Date(attendanceDate).toLocaleDateString()}</CardDescription>
+                <CardTitle className="text-slate-900">Mark Attendance</CardTitle>
+                <CardDescription>Record daily presence for students</CardDescription>
               </div>
-              <div className="flex items-center gap-3">
-                <Input 
-                  type="date" 
-                  className="h-9 w-40"
-                  value={attendanceDate}
-                  onChange={(e) => setAttendanceDate(e.target.value)}
-                />
+              <div className="flex items-center gap-4">
+                <div className="flex flex-col gap-1">
+                  <Label className="text-[10px] uppercase font-bold text-slate-400">Date</Label>
+                  <Input 
+                    type="date" 
+                    className="h-9 w-40 bg-white shadow-sm"
+                    value={attendanceDate}
+                    onChange={(e) => setAttendanceDate(e.target.value)}
+                  />
+                </div>
+                <Button variant="outline" size="sm" className="mt-5" onClick={() => setSelectedAttendanceClass(null)}>Back</Button>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase font-bold text-slate-400">Subject Name</Label>
+                  <p className="font-bold text-slate-700">{cls?.name} - {cls?.section}</p>
+                </div>
+                <div className="flex items-end justify-end">
+                  <Button 
+                    size="sm" 
+                    onClick={() => cls && markAllPresent(cls.id, cls.studentIds)} 
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    <CheckCircle2 className="h-4 w-4 mr-2" /> Mark All Present
+                  </Button>
+                </div>
+              </div>
+
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Student Name</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead className="text-center">Present / Absent</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -659,15 +761,39 @@ export default function AdminDashboard({ activeTab, user }: AdminDashboardProps)
                     const status = record?.records[sid];
                     return (
                       <TableRow key={sid}>
-                        <TableCell className="font-medium">{student?.name || 'Unknown'}</TableCell>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500">
+                              {student?.name.charAt(0) || '?'}
+                            </div>
+                            {student?.name || 'Unknown'}
+                          </div>
+                        </TableCell>
                         <TableCell>
-                          {status ? (
-                            <Badge variant={status === 'present' ? 'default' : 'destructive'} className="capitalize">
-                              {status}
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-slate-400 border-slate-200">No Record</Badge>
-                          )}
+                          <div className="flex items-center justify-center gap-4">
+                            <button 
+                              onClick={() => markAttendance(sid, selectedAttendanceClass, 'present')}
+                              className={cn(
+                                "h-10 w-10 rounded-full flex items-center justify-center transition-all",
+                                status === 'present' 
+                                  ? "bg-green-500 text-white shadow-md scale-110" 
+                                  : "bg-slate-100 text-slate-400 hover:bg-green-50 hover:text-green-500"
+                              )}
+                            >
+                              <Check className="h-6 w-6" />
+                            </button>
+                            <button 
+                              onClick={() => markAttendance(sid, selectedAttendanceClass, 'absent')}
+                              className={cn(
+                                "h-10 w-10 rounded-full flex items-center justify-center transition-all",
+                                status === 'absent' 
+                                  ? "bg-red-500 text-white shadow-md scale-110" 
+                                  : "bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                              )}
+                            >
+                              <X className="h-6 w-6" />
+                            </button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -802,6 +928,90 @@ export default function AdminDashboard({ activeTab, user }: AdminDashboardProps)
   }
 
   if (activeTab === 'grades') {
+    if (selectedGradeClass) {
+      const cls = classes.find(c => c.id === selectedGradeClass);
+      const classStudents = users.filter(u => cls?.studentIds.includes(u.uid));
+      const classGrades = gradeRecords.filter(g => g.classId === selectedGradeClass);
+
+      return (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <Button variant="ghost" size="sm" onClick={() => setSelectedGradeGradeClass(null)}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Overview
+            </Button>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Label className="text-xs font-bold uppercase text-slate-400">Total Score</Label>
+                <Input 
+                  type="number" 
+                  className="h-8 w-20" 
+                  value={totalScore} 
+                  onChange={(e) => setTotalScore(Number(e.target.value))} 
+                />
+              </div>
+            </div>
+          </div>
+
+          <Card className="border-none shadow-sm">
+            <CardHeader>
+              <CardTitle>Upload Results: {cls?.name}</CardTitle>
+              <CardDescription>Enter scores for students in this class</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Student Name</TableHead>
+                    <TableHead>Score</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {classStudents.map((student) => {
+                    const latestGrade = [...classGrades]
+                      .filter(g => g.studentId === student.uid)
+                      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+
+                    return (
+                      <TableRow key={student.uid}>
+                        <TableCell className="font-medium">{student.name}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Input 
+                              type="number" 
+                              className="w-24 h-8" 
+                              placeholder="Score"
+                              onBlur={(e) => {
+                                const val = e.target.value === '' ? NaN : Number(e.target.value);
+                                if (!isNaN(val) && val >= 0) {
+                                  submitGrade(student.uid, selectedGradeClass, val);
+                                }
+                              }}
+                            />
+                            <span className="text-xs text-slate-400">/ {totalScore}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {latestGrade ? (
+                            <Badge variant="outline" className="text-green-600 bg-green-50 border-green-200">
+                              Last: {latestGrade.score}/{latestGrade.totalScore}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-slate-400 italic">No results</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
     const classPerformance = classes.map(cls => {
       const records = gradeRecords.filter(r => r.classId === cls.id);
       const avg = records.length > 0 
@@ -812,7 +1022,7 @@ export default function AdminDashboard({ activeTab, user }: AdminDashboardProps)
         name: cls.name,
         section: cls.section,
         average: avg,
-        totalExams: new Set(records.map(r => r.examName)).size
+        totalRecords: records.length
       };
     });
 
@@ -830,7 +1040,8 @@ export default function AdminDashboard({ activeTab, user }: AdminDashboardProps)
                   <TableHead>Class Name</TableHead>
                   <TableHead>Section</TableHead>
                   <TableHead>Average Grade</TableHead>
-                  <TableHead>Exams Held</TableHead>
+                  <TableHead>Records</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -843,7 +1054,12 @@ export default function AdminDashboard({ activeTab, user }: AdminDashboardProps)
                         {cls.average}%
                       </Badge>
                     </TableCell>
-                    <TableCell>{cls.totalExams}</TableCell>
+                    <TableCell>{cls.totalRecords}</TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedGradeGradeClass(cls.id)}>
+                        Upload Results
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

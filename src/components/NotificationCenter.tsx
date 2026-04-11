@@ -23,7 +23,7 @@ import {
   PopoverContent, 
   PopoverTrigger 
 } from './ui/popover';
-import { Button } from './ui/button';
+import { Button, buttonVariants } from './ui/button';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 
@@ -98,7 +98,13 @@ export default function NotificationCenter() {
     <Popover>
       <PopoverTrigger 
         render={
-          <Button variant="ghost" size="icon" className="relative text-slate-500" />
+          <button 
+            type="button"
+            className={cn(
+              buttonVariants({ variant: "ghost", size: "icon" }),
+              "relative text-slate-500"
+            )}
+          />
         }
       >
         <Bell className="h-5 w-5" />

@@ -204,3 +204,15 @@ export interface Notification {
   createdAt: string;
   link?: string;
 }
+
+export interface ScheduleEntry {
+  id: string;
+  studentId: string;
+  day: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
+  time: string;
+  title: string;
+  type: 'class' | 'exam' | 'study' | 'other';
+  location?: string;
+  teacherName?: string;
+  description?: string;
+}

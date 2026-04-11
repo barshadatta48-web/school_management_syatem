@@ -258,17 +258,14 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
   };
 
   const submitGrade = async (studentId: string, score: number) => {
-    if (!selectedClass || !examName) {
-      toast.error("Please enter exam name");
-      return;
-    }
-    const gradeId = `${selectedClass.id}_${studentId}_${examName.replace(/\s+/g, '_')}`;
+    if (!selectedClass) return;
+    const gradeId = `grade_${selectedClass.id}_${studentId}_${Date.now()}`;
     try {
       await setDoc(doc(db, 'grades', gradeId), {
         id: gradeId,
         studentId,
         classId: selectedClass.id,
-        examName,
+        examName: 'Final Result',
         score,
         totalScore,
         date: new Date().toISOString()
@@ -278,7 +275,7 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
       await sendNotification({
         userId: studentId,
         title: 'New Grade Posted',
-        message: `Your grade for ${examName} has been posted: ${score}/${totalScore}`,
+        message: `Your exam result has been posted: ${score}/${totalScore}`,
         type: 'success'
       });
 
@@ -298,8 +295,8 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
   };
 
   const suggestGrades = async () => {
-    if (!selectedClass || !examName) {
-      toast.error("Please select a class and enter an exam name");
+    if (!selectedClass) {
+      toast.error("Please select a class");
       return;
     }
 
@@ -321,7 +318,7 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
         };
       });
 
-      const prompt = `As an AI teaching assistant, suggest grades for the following students for an exam titled "${examName}" with a total score of ${totalScore}.
+      const prompt = `As an AI teaching assistant, suggest grades for the following students for their latest exam in "${selectedClass.name}" with a total score of ${totalScore}.
       Base your suggestions on their past performance history provided below.
       Be realistic - if a student consistently gets 80%, suggest something around that range, but allow for slight variation.
       
@@ -647,40 +644,40 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
           <Card className="border-none shadow-sm">
             <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <CardTitle>Attendance Management</CardTitle>
-                <CardDescription>{selectedClass.name} - Section {selectedClass.section}</CardDescription>
+                <CardTitle className="text-slate-900">Mark Attendance</CardTitle>
+                <CardDescription>Record daily presence for your students</CardDescription>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-lg">
+              <div className="flex items-center gap-4">
+                <div className="flex flex-col gap-1">
+                  <Label className="text-[10px] uppercase font-bold text-slate-400">Date</Label>
                   <Input 
                     type="date" 
-                    className="h-8 w-40 bg-white border-none shadow-sm"
+                    className="h-9 w-40 bg-white shadow-sm"
                     value={attendanceDate}
                     onChange={(e) => setAttendanceDate(e.target.value)}
                   />
                 </div>
-                <Button variant="outline" size="sm" onClick={() => setSelectedClass(null)}>Back</Button>
+                <Button variant="outline" size="sm" className="mt-5" onClick={() => setSelectedClass(null)}>Back</Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex items-center justify-between bg-blue-50 p-4 rounded-xl border border-blue-100">
-                <div className="flex items-center gap-3 text-blue-700">
-                  <Info className="h-5 w-5" />
-                  <p className="text-sm font-medium">
-                    Marking attendance for <span className="font-bold">{new Date(attendanceDate).toLocaleDateString(undefined, { dateStyle: 'long' })}</span>
-                  </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase font-bold text-slate-400">Subject Name</Label>
+                  <p className="font-bold text-slate-700">{selectedClass.name} - {selectedClass.section}</p>
                 </div>
-                <Button size="sm" onClick={markAllPresent} className="bg-blue-600 hover:bg-blue-700">
-                  <CheckCircle2 className="h-4 w-4 mr-2" /> Mark All Present
-                </Button>
+                <div className="flex items-end justify-end">
+                  <Button size="sm" onClick={markAllPresent} className="bg-blue-600 hover:bg-blue-700">
+                    <CheckCircle2 className="h-4 w-4 mr-2" /> Mark All Present
+                  </Button>
+                </div>
               </div>
 
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Student Name</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead className="text-center">Present / Absent</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -697,38 +694,29 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
                           </div>
                         </TableCell>
                         <TableCell>
-                          {status ? (
-                            <Badge variant={status === 'present' ? 'default' : 'destructive'} className="capitalize">
-                              {status}
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-slate-400 border-slate-200">Pending</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button 
-                              size="sm" 
-                              variant={status === 'present' ? 'default' : 'outline'} 
-                              className={cn(
-                                "h-8",
-                                status === 'present' ? "bg-green-600 hover:bg-green-700" : "text-green-600 hover:bg-green-50 hover:text-green-700"
-                              )} 
+                          <div className="flex items-center justify-center gap-4">
+                            <button 
                               onClick={() => markAttendance(student.uid, 'present')}
-                            >
-                              <Check className="h-4 w-4 mr-1" /> Present
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              variant={status === 'absent' ? 'destructive' : 'outline'} 
                               className={cn(
-                                "h-8",
-                                status === 'absent' ? "" : "text-red-600 hover:bg-red-50 hover:text-red-700"
-                              )} 
-                              onClick={() => markAttendance(student.uid, 'absent')}
+                                "h-10 w-10 rounded-full flex items-center justify-center transition-all",
+                                status === 'present' 
+                                  ? "bg-green-500 text-white shadow-md scale-110" 
+                                  : "bg-slate-100 text-slate-400 hover:bg-green-50 hover:text-green-500"
+                              )}
                             >
-                              <X className="h-4 w-4 mr-1" /> Absent
-                            </Button>
+                              <Check className="h-6 w-6" />
+                            </button>
+                            <button 
+                              onClick={() => markAttendance(student.uid, 'absent')}
+                              className={cn(
+                                "h-10 w-10 rounded-full flex items-center justify-center transition-all",
+                                status === 'absent' 
+                                  ? "bg-red-500 text-white shadow-md scale-110" 
+                                  : "bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                              )}
+                            >
+                              <X className="h-6 w-6" />
+                            </button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -800,10 +788,6 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
             <CardContent className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl">
                 <div className="space-y-2">
-                  <Label>Exam Name</Label>
-                  <Input placeholder="e.g. Midterm 2024" value={examName} onChange={e => setExamName(e.target.value)} />
-                </div>
-                <div className="space-y-2">
                   <Label>Total Score</Label>
                   <Input type="number" value={totalScore} onChange={e => setTotalScore(Number(e.target.value))} />
                 </div>
@@ -819,21 +803,23 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
                 </TableHeader>
                 <TableBody>
                   {students.map((student) => {
-                    const existingGrade = classGrades.find(g => g.studentId === student.uid && g.examName === examName);
+                    const latestGrade = [...classGrades]
+                      .filter(g => g.studentId === student.uid)
+                      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
                     return (
                       <TableRow key={student.uid}>
                         <TableCell className="font-medium">{student.name}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <Input 
-                              key={`${student.uid}_${examName}_${suggestedGrades[student.uid] || ''}`}
+                              key={`${student.uid}_${suggestedGrades[student.uid] || ''}`}
                               type="number" 
                               className={cn(
                                 "w-24",
-                                suggestedGrades[student.uid] !== undefined && !existingGrade && "border-purple-300 bg-purple-50"
+                                suggestedGrades[student.uid] !== undefined && !latestGrade && "border-purple-300 bg-purple-50"
                               )} 
                               placeholder="Score" 
-                              defaultValue={existingGrade?.score ?? suggestedGrades[student.uid]}
+                              defaultValue={latestGrade?.score ?? suggestedGrades[student.uid]}
                               onBlur={(e) => {
                                 const val = e.target.value === '' ? NaN : Number(e.target.value);
                                 if (!isNaN(val) && val >= 0) {
@@ -841,7 +827,7 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
                                 }
                               }}
                             />
-                            {suggestedGrades[student.uid] !== undefined && !existingGrade && (
+                            {suggestedGrades[student.uid] !== undefined && !latestGrade && (
                               <div className="flex items-center gap-1">
                                 <Badge variant="secondary" className="bg-purple-100 text-purple-700 border-purple-200 text-[10px]">
                                   AI: {suggestedGrades[student.uid]}
@@ -865,9 +851,9 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            {existingGrade ? (
+                            {latestGrade ? (
                               <Badge variant="outline" className="text-green-600 bg-green-50 border-green-200">
-                                <Check className="h-3 w-3 mr-1" /> Saved
+                                Last: {latestGrade.score}/{latestGrade.totalScore}
                               </Badge>
                             ) : (
                               <span className="text-xs text-slate-400 italic">Not entered</span>
@@ -1002,7 +988,7 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
                   <TableHeader>
                     <TableRow>
                       <TableHead>Exam Title</TableHead>
-                      <TableHead>Subject</TableHead>
+                      <TableHead>Subject Name</TableHead>
                       <TableHead>Questions</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Date</TableHead>
