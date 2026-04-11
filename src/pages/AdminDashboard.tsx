@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db, UserProfile, OperationType, handleFirestoreError, ClassData, Announcement, AttendanceRecord, GradeRecord } from '../lib/firebase';
+import { db, UserProfile, OperationType, handleFirestoreError, ClassData, Announcement, AttendanceRecord, GradeRecord, Exam, sendNotification } from '../lib/firebase';
 import { collection, query, onSnapshot, updateDoc, doc, addDoc, getDocs, deleteDoc, orderBy } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
@@ -9,16 +9,19 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
-import { Users, BookOpen, GraduationCap, ShieldAlert, Plus, X, Megaphone, Trash2, Search, CalendarCheck } from 'lucide-react';
+import { Users, BookOpen, GraduationCap, ShieldAlert, Plus, X, Megaphone, Trash2, Search, CalendarCheck, Calendar, BrainCircuit, CheckCircle2, XCircle, HelpCircle, ArrowLeft, Clock, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
+import ProfileManagement from '../components/ProfileManagement';
+
 interface AdminDashboardProps {
   activeTab: string;
+  user: UserProfile;
 }
 
-export default function AdminDashboard({ activeTab }: AdminDashboardProps) {
+export default function AdminDashboard({ activeTab, user }: AdminDashboardProps) {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -35,7 +38,12 @@ export default function AdminDashboard({ activeTab }: AdminDashboardProps) {
 
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [gradeRecords, setGradeRecords] = useState<GradeRecord[]>([]);
+  const [exams, setExams] = useState<Exam[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Detailed Attendance State
+  const [selectedAttendanceClass, setSelectedAttendanceClass] = useState<string | null>(null);
+  const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
     const usersUnsubscribe = onSnapshot(query(collection(db, 'users')), (snapshot) => {
@@ -70,12 +78,19 @@ export default function AdminDashboard({ activeTab }: AdminDashboardProps) {
       handleFirestoreError(error, OperationType.LIST, 'grades');
     });
 
+    const examsUnsubscribe = onSnapshot(collection(db, 'exams'), (snapshot) => {
+      setExams(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Exam)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'exams');
+    });
+
     return () => {
       usersUnsubscribe();
       classesUnsubscribe();
       announcementsUnsubscribe();
       attendanceUnsubscribe();
       gradesUnsubscribe();
+      examsUnsubscribe();
     };
   }, []);
 
@@ -146,6 +161,17 @@ export default function AdminDashboard({ activeTab }: AdminDashboardProps) {
         authorName: admin?.name || 'Admin',
         createdAt: new Date().toISOString()
       });
+
+      // Send notifications to all users
+      for (const u of users) {
+        await sendNotification({
+          userId: u.uid,
+          title: 'New Announcement',
+          message: newAnnouncement.title,
+          type: 'info'
+        });
+      }
+
       toast.success("Announcement posted");
       setIsAnnounceDialogOpen(false);
       setNewAnnouncement({ title: '', content: '', priority: 'medium' });
@@ -163,13 +189,34 @@ export default function AdminDashboard({ activeTab }: AdminDashboardProps) {
     }
   };
 
-  if (activeTab === 'overview') {
-    const chartData = [
-      { name: 'Students', value: stats.students, color: '#22c55e' },
-      { name: 'Teachers', value: stats.teachers, color: '#a855f7' },
-      { name: 'Admins', value: users.filter(u => u.role === 'admin').length, color: '#ef4444' }
-    ];
+  const recentActivities = [
+    ...announcements.slice(0, 2).map(ann => ({
+      user: 'Admin',
+      action: `posted announcement: ${ann.title}`,
+      time: new Date(ann.createdAt).toLocaleDateString(),
+      icon: Megaphone,
+      color: 'text-orange-500'
+    })),
+    ...users.filter(u => u.createdAt).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 2).map(u => ({
+      user: 'System',
+      action: `new ${u.role} registered: ${u.name}`,
+      time: new Date(u.createdAt).toLocaleDateString(),
+      icon: Users,
+      color: 'text-purple-500'
+    })),
+    ...gradeRecords.slice(0, 2).map(g => {
+      const student = users.find(u => u.uid === g.studentId);
+      return {
+        user: student?.name || 'Student',
+        action: `received grade for ${g.examName}`,
+        time: new Date(g.date).toLocaleDateString(),
+        icon: GraduationCap,
+        color: 'text-green-500'
+      };
+    })
+  ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 5);
 
+  if (activeTab === 'overview') {
     return (
       <div className="space-y-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -183,39 +230,63 @@ export default function AdminDashboard({ activeTab }: AdminDashboardProps) {
           <Card className="lg:col-span-2 border-none shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Recent Activity</CardTitle>
-              <Badge variant="outline" className="bg-white">System Logs</Badge>
+              <Badge variant="outline" className="bg-white">Live Updates</Badge>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {[
-                  { user: 'Sarah Wilson', action: 'submitted Midterm grades', time: '2 mins ago', icon: GraduationCap, color: 'text-green-500' },
-                  { user: 'Admin', action: 'posted new announcement', time: '15 mins ago', icon: Megaphone, color: 'text-orange-500' },
-                  { user: 'John Doe', action: 'marked attendance for Math 101', time: '1 hour ago', icon: CalendarCheck, color: 'text-blue-500' },
-                  { user: 'System', action: 'new student registered', time: '3 hours ago', icon: Users, color: 'text-purple-500' },
-                ].map((activity, idx) => (
-                  <div key={idx} className="flex items-center gap-4 p-3 rounded-xl hover:bg-slate-50 transition-colors">
-                    <div className={`p-2 rounded-lg bg-white border border-slate-100 ${activity.color}`}>
-                      <activity.icon className="h-4 w-4" />
+                {recentActivities.length === 0 ? (
+                  <p className="text-sm text-slate-500 italic text-center py-8">No recent activity found.</p>
+                ) : (
+                  recentActivities.map((activity, idx) => (
+                    <div key={idx} className="flex items-center gap-4 p-3 rounded-xl hover:bg-slate-50 transition-colors">
+                      <div className={`p-2 rounded-lg bg-white border border-slate-100 ${activity.color}`}>
+                        <activity.icon className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">
+                          <span className="font-bold">{activity.user}</span> {activity.action}
+                        </p>
+                        <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">{activity.time}</p>
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">
-                        <span className="font-bold">{activity.user}</span> {activity.action}
-                      </p>
-                      <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">{activity.time}</p>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-none shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Announcements</CardTitle>
-              <Dialog open={isAnnounceDialogOpen} onOpenChange={setIsAnnounceDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm" variant="outline"><Plus className="h-4 w-4" /></Button>
-                </DialogTrigger>
+          <div className="space-y-6">
+            <Card className="border-none shadow-sm">
+              <CardHeader>
+                <CardTitle>Quick Management</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-3">
+                <Button variant="outline" className="h-20 flex flex-col gap-2" onClick={() => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'users' }))}>
+                  <Users className="h-5 w-5 text-blue-500" />
+                  <span className="text-[10px] font-bold uppercase">Manage Users</span>
+                </Button>
+                <Button variant="outline" className="h-20 flex flex-col gap-2" onClick={() => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'classes' }))}>
+                  <BookOpen className="h-5 w-5 text-green-500" />
+                  <span className="text-[10px] font-bold uppercase">Manage Classes</span>
+                </Button>
+                <Button variant="outline" className="h-20 flex flex-col gap-2" onClick={() => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'exams' }))}>
+                  <BrainCircuit className="h-5 w-5 text-purple-500" />
+                  <span className="text-[10px] font-bold uppercase">Manage Exams</span>
+                </Button>
+                <Button variant="outline" className="h-20 flex flex-col gap-2" onClick={() => setIsAnnounceDialogOpen(true)}>
+                  <Megaphone className="h-5 w-5 text-orange-500" />
+                  <span className="text-[10px] font-bold uppercase">New Announce</span>
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-sm">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Announcements</CardTitle>
+                <Dialog open={isAnnounceDialogOpen} onOpenChange={setIsAnnounceDialogOpen}>
+                  <DialogTrigger render={<Button size="sm" variant="outline" />}>
+                    <Plus className="h-4 w-4" />
+                  </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Post Announcement</DialogTitle>
@@ -275,6 +346,7 @@ export default function AdminDashboard({ activeTab }: AdminDashboardProps) {
             </CardContent>
           </Card>
         </div>
+      </div>
 
         <Card className="border-none shadow-sm">
           <CardHeader>
@@ -386,8 +458,8 @@ export default function AdminDashboard({ activeTab }: AdminDashboardProps) {
         <div className="flex justify-between items-center">
           <h3 className="text-xl font-bold">Manage Classes</h3>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button><Plus className="h-4 w-4 mr-2" /> Create Class</Button>
+            <DialogTrigger render={<Button />}>
+              <Plus className="h-4 w-4 mr-2" /> Create Class
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
@@ -499,6 +571,115 @@ export default function AdminDashboard({ activeTab }: AdminDashboardProps) {
   }
 
   if (activeTab === 'attendance') {
+    const totalPresent = attendanceRecords.reduce((acc, r) => acc + Object.values(r.records).filter(s => s === 'present').length, 0);
+    const totalPossible = attendanceRecords.reduce((acc, r) => acc + Object.values(r.records).length, 0);
+    const overallRate = totalPossible > 0 ? Math.round((totalPresent / totalPossible) * 100) : 0;
+
+    if (selectedAttendanceClass) {
+      const cls = classes.find(c => c.id === selectedAttendanceClass);
+      const record = attendanceRecords.find(r => r.classId === selectedAttendanceClass && r.date === attendanceDate);
+      
+      const stats = {
+        present: record ? Object.values(record.records).filter(s => s === 'present').length : 0,
+        absent: record ? Object.values(record.records).filter(s => s === 'absent').length : 0,
+        noRecord: (cls?.studentIds.length || 0) - (record ? Object.values(record.records).length : 0)
+      };
+
+      return (
+        <div className="space-y-6">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="sm" onClick={() => setSelectedAttendanceClass(null)}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Overview
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card className="border-none shadow-sm bg-green-50">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-green-600 uppercase">Present</p>
+                    <p className="text-2xl font-bold text-green-700">{stats.present}</p>
+                  </div>
+                  <CheckCircle2 className="h-8 w-8 text-green-200" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-none shadow-sm bg-red-50">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-red-600 uppercase">Absent</p>
+                    <p className="text-2xl font-bold text-red-700">{stats.absent}</p>
+                  </div>
+                  <XCircle className="h-8 w-8 text-red-200" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-none shadow-sm bg-slate-50">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-slate-600 uppercase">No Record</p>
+                    <p className="text-2xl font-bold text-slate-700">{stats.noRecord}</p>
+                  </div>
+                  <HelpCircle className="h-8 w-8 text-slate-200" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="border-none shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Detailed Attendance: {cls?.name}</CardTitle>
+                <CardDescription>Section {cls?.section} - {new Date(attendanceDate).toLocaleDateString()}</CardDescription>
+              </div>
+              <div className="flex items-center gap-3">
+                <Input 
+                  type="date" 
+                  className="h-9 w-40"
+                  value={attendanceDate}
+                  onChange={(e) => setAttendanceDate(e.target.value)}
+                />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Student Name</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {cls?.studentIds.map(sid => {
+                    const student = users.find(u => u.uid === sid);
+                    const status = record?.records[sid];
+                    return (
+                      <TableRow key={sid}>
+                        <TableCell className="font-medium">{student?.name || 'Unknown'}</TableCell>
+                        <TableCell>
+                          {status ? (
+                            <Badge variant={status === 'present' ? 'default' : 'destructive'} className="capitalize">
+                              {status}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-slate-400 border-slate-200">No Record</Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
     const classAttendance = classes.map(cls => {
       const records = attendanceRecords.filter(r => r.classId === cls.id);
       let present = 0;
@@ -519,51 +700,104 @@ export default function AdminDashboard({ activeTab }: AdminDashboardProps) {
     });
 
     return (
-      <Card className="border-none shadow-sm">
-        <CardHeader>
-          <CardTitle>School-wide Attendance</CardTitle>
-          <CardDescription>Average attendance rate per class</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Class Name</TableHead>
-                <TableHead>Section</TableHead>
-                <TableHead>Attendance Rate</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {classAttendance.map((cls) => (
-                <TableRow key={cls.id}>
-                  <TableCell className="font-medium">{cls.name}</TableCell>
-                  <TableCell>{cls.section}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div 
-                          className={cn(
-                            "h-full transition-all",
-                            cls.rate >= 90 ? "bg-green-500" : cls.rate >= 75 ? "bg-blue-500" : "bg-orange-500"
-                          )} 
-                          style={{ width: `${cls.rate}%` }} 
-                        />
-                      </div>
-                      <span className="text-sm font-bold">{cls.rate}%</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={cls.rate >= 75 ? 'default' : 'destructive'}>
-                      {cls.rate >= 75 ? 'Healthy' : 'Low'}
-                    </Badge>
-                  </TableCell>
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="border-none shadow-sm bg-primary/5">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-primary uppercase">Overall Attendance</p>
+                  <p className="text-3xl font-bold text-slate-900">{overallRate}%</p>
+                </div>
+                <Users className="h-10 w-10 text-primary/20" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-none shadow-sm">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase">Total Classes</p>
+                  <p className="text-3xl font-bold text-slate-900">{classes.length}</p>
+                </div>
+                <BookOpen className="h-10 w-10 text-slate-100" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-none shadow-sm">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase">Total Records</p>
+                  <p className="text-3xl font-bold text-slate-900">{attendanceRecords.length}</p>
+                </div>
+                <Calendar className="h-10 w-10 text-slate-100" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="border-none shadow-sm">
+          <CardHeader>
+            <CardTitle>School-wide Attendance</CardTitle>
+            <CardDescription>Average attendance rate per class across all recorded dates</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Class Name</TableHead>
+                  <TableHead>Section</TableHead>
+                  <TableHead>Attendance Rate</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              </TableHeader>
+              <TableBody>
+                {classAttendance.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-12 text-slate-500">
+                      <Calendar className="h-12 w-12 text-slate-200 mx-auto mb-4" />
+                      No classes found. Create a class to start tracking attendance.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  classAttendance.map((cls) => (
+                    <TableRow key={cls.id}>
+                      <TableCell className="font-medium">{cls.name}</TableCell>
+                      <TableCell>{cls.section}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div 
+                              className={cn(
+                                "h-full transition-all",
+                                cls.rate >= 90 ? "bg-green-500" : cls.rate >= 75 ? "bg-blue-500" : "bg-orange-500"
+                              )} 
+                              style={{ width: `${cls.rate}%` }} 
+                            />
+                          </div>
+                          <span className="text-sm font-bold">{cls.rate}%</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={cls.rate >= 75 ? 'default' : 'destructive'}>
+                          {cls.rate >= 75 ? 'Healthy' : 'Low'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="sm" onClick={() => setSelectedAttendanceClass(cls.id)}>
+                          View Details
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
@@ -583,79 +817,124 @@ export default function AdminDashboard({ activeTab }: AdminDashboardProps) {
     });
 
     return (
-      <Card className="border-none shadow-sm">
-        <CardHeader>
-          <CardTitle>Academic Records</CardTitle>
-          <CardDescription>Consolidated performance by class</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Class Name</TableHead>
-                <TableHead>Section</TableHead>
-                <TableHead>Average Grade</TableHead>
-                <TableHead>Exams Held</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {classPerformance.map((cls) => (
-                <TableRow key={cls.id}>
-                  <TableCell className="font-medium">{cls.name}</TableCell>
-                  <TableCell>{cls.section}</TableCell>
-                  <TableCell>
-                    <Badge variant={cls.average >= 80 ? 'default' : cls.average >= 60 ? 'secondary' : 'destructive'}>
-                      {cls.average}%
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{cls.totalExams}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (activeTab === 'profile') {
-    return (
-      <div className="max-w-2xl mx-auto space-y-8">
+      <div className="space-y-8">
         <Card className="border-none shadow-sm">
           <CardHeader>
-            <CardTitle>Your Profile</CardTitle>
-            <CardDescription>Manage your account information</CardDescription>
+            <CardTitle>Academic Records</CardTitle>
+            <CardDescription>Consolidated performance by class</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="flex items-center gap-6 p-6 bg-slate-50 rounded-2xl">
-              <div className="h-24 w-24 rounded-full bg-primary/10 flex items-center justify-center text-3xl font-bold text-primary">
-                {users.find(u => u.role === 'admin')?.name.charAt(0) || 'A'}
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-2xl font-bold">{users.find(u => u.role === 'admin')?.name}</h3>
-                <p className="text-slate-500">{users.find(u => u.role === 'admin')?.email}</p>
-                <Badge className="mt-2">Administrator</Badge>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Full Name</Label>
-                <Input value={users.find(u => u.role === 'admin')?.name} disabled />
-              </div>
-              <div className="space-y-2">
-                <Label>Email Address</Label>
-                <Input value={users.find(u => u.role === 'admin')?.email} disabled />
-              </div>
-            </div>
-            
-            <div className="pt-6 border-t">
-              <p className="text-xs text-slate-400 italic">Profile editing is managed via your Google Account.</p>
-            </div>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Class Name</TableHead>
+                  <TableHead>Section</TableHead>
+                  <TableHead>Average Grade</TableHead>
+                  <TableHead>Exams Held</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {classPerformance.map((cls) => (
+                  <TableRow key={cls.id}>
+                    <TableCell className="font-medium">{cls.name}</TableCell>
+                    <TableCell>{cls.section}</TableCell>
+                    <TableCell>
+                      <Badge variant={cls.average >= 80 ? 'default' : cls.average >= 60 ? 'secondary' : 'destructive'}>
+                        {cls.average}%
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{cls.totalExams}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       </div>
     );
+  }
+
+  if (activeTab === 'exams') {
+    return (
+      <div className="space-y-6">
+        <Card className="border-none shadow-sm">
+          <CardHeader>
+            <CardTitle>Exam Schedule & Status</CardTitle>
+            <CardDescription>Overview of all assigned exams across the school</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Exam Title</TableHead>
+                  <TableHead>Class</TableHead>
+                  <TableHead>Teacher</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Scheduled Date</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {exams.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-12 text-slate-500">
+                      <BrainCircuit className="h-12 w-12 text-slate-200 mx-auto mb-4" />
+                      No exams scheduled yet.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  exams.map((exam) => {
+                    const cls = classes.find(c => c.id === exam.classId);
+                    const teacher = users.find(u => u.uid === exam.teacherId);
+                    return (
+                      <TableRow key={exam.id}>
+                        <TableCell className="font-medium">{exam.title}</TableCell>
+                        <TableCell>{cls?.name || 'Unknown'}</TableCell>
+                        <TableCell>{teacher?.name || 'Unknown'}</TableCell>
+                        <TableCell>
+                          <Badge variant={
+                            exam.status === 'completed' ? 'secondary' : 
+                            exam.status === 'ongoing' ? 'default' : 'outline'
+                          }>
+                            {exam.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-xs text-slate-500">
+                          {exam.scheduledDate ? new Date(exam.scheduledDate).toLocaleDateString() : 'TBD'}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                            onClick={async () => {
+                              if (confirm("Are you sure you want to delete this exam? This will not delete recorded grades.")) {
+                                try {
+                                  await deleteDoc(doc(db, 'exams', exam.id));
+                                  toast.success("Exam deleted");
+                                } catch (error) {
+                                  handleFirestoreError(error, OperationType.DELETE, `exams/${exam.id}`);
+                                }
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (activeTab === 'profile') {
+    return <ProfileManagement user={user} description="Manage your administrative profile and account settings" />;
   }
 
   return <div className="text-slate-500 italic p-8 bg-white rounded-2xl border border-dashed border-slate-200 text-center">

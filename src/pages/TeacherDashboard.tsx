@@ -1,17 +1,19 @@
 import { useState, useEffect } from 'react';
-import { db, UserProfile, OperationType, handleFirestoreError, ClassData, AttendanceRecord, GradeRecord, Exam, Announcement } from '../lib/firebase';
-import { collection, query, where, onSnapshot, addDoc, doc, updateDoc, setDoc, orderBy } from 'firebase/firestore';
+import { db, UserProfile, OperationType, handleFirestoreError, ClassData, AttendanceRecord, GradeRecord, Exam, Announcement, sendNotification } from '../lib/firebase';
+import { collection, query, where, onSnapshot, addDoc, doc, updateDoc, setDoc, orderBy, deleteDoc } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { toast } from 'sonner';
-import { Check, X, Calendar, GraduationCap, BrainCircuit, Loader2, Save, Megaphone, BookOpen, Users } from 'lucide-react';
+import { Check, X, Calendar, GraduationCap, BrainCircuit, Loader2, Save, Megaphone, BookOpen, Users, Eye, Trash2, Info, CheckCircle2, Sparkles, Wand2, Clock, TrendingUp } from 'lucide-react';
 import { GoogleGenAI, Type } from "@google/genai";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { cn } from '../lib/utils';
+import ProfileManagement from '../components/ProfileManagement';
 
 interface TeacherDashboardProps {
   activeTab: string;
@@ -29,10 +31,23 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
   
   // Exam Generation State
   const [examTopic, setExamTopic] = useState('');
+  const [scheduledDate, setScheduledDate] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedExam, setGeneratedExam] = useState<any>(null);
   const [savedExams, setSavedExams] = useState<Exam[]>([]);
   const [allStudents, setAllStudents] = useState<UserProfile[]>([]);
+  const [viewingExam, setViewingExam] = useState<Exam | null>(null);
+
+  // Attendance Management State
+  const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
+  const [currentAttendance, setCurrentAttendance] = useState<AttendanceRecord | null>(null);
+
+  // AI Grade Suggestion State
+  const [isSuggesting, setIsSuggesting] = useState(false);
+  const [suggestedGrades, setSuggestedGrades] = useState<Record<string, number>>({});
+
+  // Exam Filter State
+  const [examFilter, setExamFilter] = useState<'all' | 'upcoming' | 'ongoing' | 'completed'>('all');
 
   useEffect(() => {
     const q = query(collection(db, 'classes'), where('teacherId', '==', user.uid));
@@ -99,6 +114,22 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
     }
   }, [selectedClass]);
 
+  useEffect(() => {
+    if (selectedClass && attendanceDate) {
+      const attendanceId = `${selectedClass.id}_${attendanceDate}`;
+      const unsubscribe = onSnapshot(doc(db, 'attendance', attendanceId), (doc) => {
+        if (doc.exists()) {
+          setCurrentAttendance(doc.data() as AttendanceRecord);
+        } else {
+          setCurrentAttendance(null);
+        }
+      }, (error) => {
+        handleFirestoreError(error, OperationType.GET, `attendance/${attendanceId}`);
+      });
+      return () => unsubscribe();
+    }
+  }, [selectedClass, attendanceDate]);
+
   const generateExam = async () => {
     if (!examTopic || !selectedClass) {
       toast.error("Please select a class and enter a topic");
@@ -110,7 +141,9 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: `Generate a 5-question multiple choice exam for the subject "${selectedClass.name}" on the topic "${examTopic}".`,
+        contents: `Generate a 5-question multiple choice exam for the subject "${selectedClass.name}" on the topic "${examTopic}". 
+        The exam should be challenging but fair for students. 
+        Each question must have exactly 4 options and one clearly identified correct answer.`,
         config: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -158,11 +191,27 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
         classId: selectedClass.id,
         teacherId: user.uid,
         questions: generatedExam.questions,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        scheduledDate: scheduledDate || new Date().toISOString(),
+        status: 'upcoming'
       });
+
+      // Send notifications to all students in the class
+      if (selectedClass.studentIds) {
+        for (const studentId of selectedClass.studentIds) {
+          await sendNotification({
+            userId: studentId,
+            title: 'New Exam Assigned',
+            message: `A new exam "${generatedExam.title}" has been assigned for your class.`,
+            type: 'info'
+          });
+        }
+      }
+
       toast.success("Exam saved and assigned to class");
       setGeneratedExam(null);
       setExamTopic('');
+      setScheduledDate('');
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'exams');
     }
@@ -170,18 +219,39 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
 
   const markAttendance = async (studentId: string, status: 'present' | 'absent') => {
     if (!selectedClass) return;
-    const date = new Date().toISOString().split('T')[0];
-    const attendanceId = `${selectedClass.id}_${date}`;
+    const attendanceId = `${selectedClass.id}_${attendanceDate}`;
     
     try {
       const attendanceRef = doc(db, 'attendance', attendanceId);
       await setDoc(attendanceRef, {
         id: attendanceId,
         classId: selectedClass.id,
-        date,
+        date: attendanceDate,
         records: { [studentId]: status }
       }, { merge: true });
       toast.success(`Marked ${status}`);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `attendance/${attendanceId}`);
+    }
+  };
+
+  const markAllPresent = async () => {
+    if (!selectedClass || students.length === 0) return;
+    const attendanceId = `${selectedClass.id}_${attendanceDate}`;
+    const records: Record<string, 'present' | 'absent'> = {};
+    students.forEach(s => {
+      records[s.uid] = 'present';
+    });
+
+    try {
+      const attendanceRef = doc(db, 'attendance', attendanceId);
+      await setDoc(attendanceRef, {
+        id: attendanceId,
+        classId: selectedClass.id,
+        date: attendanceDate,
+        records
+      }, { merge: true });
+      toast.success("All students marked present");
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `attendance/${attendanceId}`);
     }
@@ -203,9 +273,101 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
         totalScore,
         date: new Date().toISOString()
       });
+
+      // Send notification to student
+      await sendNotification({
+        userId: studentId,
+        title: 'New Grade Posted',
+        message: `Your grade for ${examName} has been posted: ${score}/${totalScore}`,
+        type: 'success'
+      });
+
       toast.success("Grade submitted");
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `grades/${gradeId}`);
+    }
+  };
+
+  const updateExamStatus = async (examId: string, newStatus: 'upcoming' | 'ongoing' | 'completed') => {
+    try {
+      await updateDoc(doc(db, 'exams', examId), { status: newStatus });
+      toast.success(`Exam status updated to ${newStatus}`);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `exams/${examId}`);
+    }
+  };
+
+  const suggestGrades = async () => {
+    if (!selectedClass || !examName) {
+      toast.error("Please select a class and enter an exam name");
+      return;
+    }
+
+    setIsSuggesting(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+      
+      // Prepare student performance data for the prompt
+      const performanceData = students.map(student => {
+        const studentPastGrades = classGrades.filter(g => g.studentId === student.uid);
+        const history = studentPastGrades.map(g => ({
+          exam: g.examName,
+          percentage: Math.round((g.score / g.totalScore) * 100)
+        }));
+        return {
+          id: student.uid,
+          name: student.name,
+          history
+        };
+      });
+
+      const prompt = `As an AI teaching assistant, suggest grades for the following students for an exam titled "${examName}" with a total score of ${totalScore}.
+      Base your suggestions on their past performance history provided below.
+      Be realistic - if a student consistently gets 80%, suggest something around that range, but allow for slight variation.
+      
+      Student Data:
+      ${JSON.stringify(performanceData, null, 2)}
+      
+      Return the suggestions as a JSON object where keys are student IDs and values are the suggested numeric scores (not percentages).
+      Example: {"student_uid_1": 85, "student_uid_2": 72}`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            additionalProperties: { type: Type.NUMBER }
+          }
+        }
+      });
+
+      const suggestions = JSON.parse(response.text) as Record<string, number>;
+      setSuggestedGrades(suggestions);
+      toast.success("AI suggestions generated! Review them in the table.");
+    } catch (error) {
+      console.error("AI Suggestion Error:", error);
+      toast.error("Failed to generate AI suggestions");
+    } finally {
+      setIsSuggesting(false);
+    }
+  };
+
+  const applyAllSuggestions = () => {
+    Object.entries(suggestedGrades).forEach(([studentId, score]) => {
+      submitGrade(studentId, score as number);
+    });
+    setSuggestedGrades({});
+    toast.success("All AI suggestions applied and saved");
+  };
+
+  const deleteExam = async (examId: string) => {
+    try {
+      await deleteDoc(doc(db, 'exams', examId));
+      toast.success("Exam deleted");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `exams/${examId}`);
     }
   };
 
@@ -250,29 +412,80 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
             </div>
 
             {selectedClass && (
-              <Card className="border-none shadow-sm">
-                <CardHeader>
-                  <CardTitle>Grade Distribution: {selectedClass.name}</CardTitle>
-                  <CardDescription>Performance breakdown for the selected class</CardDescription>
-                </CardHeader>
-                <CardContent className="h-[250px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={gradeDistribution}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="range" />
-                      <YAxis />
-                      <Tooltip 
-                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                      />
-                      <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                        {gradeDistribution.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
+              <div className="space-y-6">
+                <Card className="border-none shadow-sm">
+                  <CardHeader>
+                    <CardTitle>Grade Distribution: {selectedClass.name}</CardTitle>
+                    <CardDescription>Performance breakdown for the selected class</CardDescription>
+                  </CardHeader>
+                  <CardContent className="h-[250px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={gradeDistribution}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="range" />
+                        <YAxis />
+                        <Tooltip 
+                          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                        />
+                        <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                          {gradeDistribution.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-none shadow-sm">
+                  <CardHeader>
+                    <CardTitle>Class Grades: {selectedClass.name}</CardTitle>
+                    <CardDescription>All recorded grades for this class</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Student</TableHead>
+                          <TableHead>Exam</TableHead>
+                          <TableHead>Score</TableHead>
+                          <TableHead>Percentage</TableHead>
+                          <TableHead>Date</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {classGrades.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center py-8 text-slate-500">
+                              No grades recorded for this class yet.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          classGrades.map((grade, idx) => {
+                            const student = students.find(s => s.uid === grade.studentId);
+                            const percentage = Math.round((grade.score / grade.totalScore) * 100);
+                            return (
+                              <TableRow key={idx}>
+                                <TableCell className="font-medium">{student?.name || 'Unknown Student'}</TableCell>
+                                <TableCell>{grade.examName}</TableCell>
+                                <TableCell>{grade.score} / {grade.totalScore}</TableCell>
+                                <TableCell>
+                                  <Badge variant={percentage >= 80 ? 'default' : percentage >= 60 ? 'secondary' : 'destructive'}>
+                                    {percentage}%
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-slate-500 text-xs">
+                                  {new Date(grade.date).toLocaleDateString()}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })
+                        )}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </div>
             )}
           </div>
 
@@ -298,6 +511,77 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
                   <Megaphone className="h-5 w-5 text-orange-500" />
                   <span className="text-[10px] font-bold uppercase">Post Update</span>
                 </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-sm h-fit">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-green-500" />
+                  Class Performance
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {classes.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic text-center py-4">No classes assigned</p>
+                  ) : (
+                    classes.map(cls => {
+                      const grades = classGrades.filter(g => g.classId === cls.id);
+                      const avg = grades.length > 0 
+                        ? Math.round(grades.reduce((acc, g) => acc + (g.score / g.totalScore), 0) / grades.length * 100)
+                        : 0;
+                      return (
+                        <div key={cls.id} className="space-y-1">
+                          <div className="flex justify-between text-xs font-medium">
+                            <span>{cls.name}</span>
+                            <span>{avg}%</span>
+                          </div>
+                          <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                            <div 
+                              className={cn(
+                                "h-full rounded-full transition-all duration-500",
+                                avg >= 80 ? "bg-green-500" : avg >= 60 ? "bg-blue-500" : "bg-red-500"
+                              )}
+                              style={{ width: `${avg}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-sm h-fit">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BrainCircuit className="h-5 w-5 text-purple-500" />
+                  Active Exams
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {savedExams.filter(e => e.status !== 'completed').slice(0, 3).length === 0 ? (
+                    <p className="text-xs text-slate-400 italic text-center py-4">No active exams</p>
+                  ) : (
+                    savedExams.filter(e => e.status !== 'completed').slice(0, 3).map(exam => (
+                      <div key={exam.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                        <div>
+                          <h4 className="font-bold text-xs">{exam.title}</h4>
+                          <p className="text-[10px] text-slate-400">{exam.subject}</p>
+                        </div>
+                        <Badge variant={exam.status === 'ongoing' ? 'default' : 'outline'} className="text-[10px]">
+                          {exam.status}
+                        </Badge>
+                      </div>
+                    ))
+                  )}
+                  <Button variant="ghost" className="w-full text-xs text-primary" onClick={() => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'exams' }))}>
+                    Manage Exams
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
@@ -345,36 +629,111 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
         {!selectedClass ? (
           <div className="text-center p-12 bg-white rounded-2xl border-2 border-dashed border-slate-200">
             <Calendar className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-            <p className="text-slate-500">Select a class from Overview to mark attendance</p>
+            <p className="text-slate-500 mb-6">Select a class to mark attendance</p>
+            <div className="max-w-xs mx-auto">
+              <select 
+                className="w-full p-2 rounded-md border border-slate-200 text-sm"
+                value={selectedClass?.id || ''}
+                onChange={(e) => setSelectedClass(classes.find(c => c.id === e.target.value) || null)}
+              >
+                <option value="">Choose a class...</option>
+                {classes.map(c => (
+                  <option key={c.id} value={c.id}>{c.name} - {c.section}</option>
+                ))}
+              </select>
+            </div>
           </div>
         ) : (
           <Card className="border-none shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Attendance: {selectedClass.name} ({new Date().toLocaleDateString()})</CardTitle>
-              <Button variant="outline" onClick={() => setSelectedClass(null)}>Back</Button>
+            <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <CardTitle>Attendance Management</CardTitle>
+                <CardDescription>{selectedClass.name} - Section {selectedClass.section}</CardDescription>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-lg">
+                  <Input 
+                    type="date" 
+                    className="h-8 w-40 bg-white border-none shadow-sm"
+                    value={attendanceDate}
+                    onChange={(e) => setAttendanceDate(e.target.value)}
+                  />
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setSelectedClass(null)}>Back</Button>
+              </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between bg-blue-50 p-4 rounded-xl border border-blue-100">
+                <div className="flex items-center gap-3 text-blue-700">
+                  <Info className="h-5 w-5" />
+                  <p className="text-sm font-medium">
+                    Marking attendance for <span className="font-bold">{new Date(attendanceDate).toLocaleDateString(undefined, { dateStyle: 'long' })}</span>
+                  </p>
+                </div>
+                <Button size="sm" onClick={markAllPresent} className="bg-blue-600 hover:bg-blue-700">
+                  <CheckCircle2 className="h-4 w-4 mr-2" /> Mark All Present
+                </Button>
+              </div>
+
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Student Name</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {students.map((student) => (
-                    <TableRow key={student.uid}>
-                      <TableCell className="font-medium">{student.name}</TableCell>
-                      <TableCell className="flex gap-2">
-                        <Button size="sm" variant="outline" className="text-green-600 hover:bg-green-50" onClick={() => markAttendance(student.uid, 'present')}>
-                          <Check className="h-4 w-4 mr-1" /> Present
-                        </Button>
-                        <Button size="sm" variant="outline" className="text-red-600 hover:bg-red-50" onClick={() => markAttendance(student.uid, 'absent')}>
-                          <X className="h-4 w-4 mr-1" /> Absent
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {students.map((student) => {
+                    const status = currentAttendance?.records[student.uid];
+                    return (
+                      <TableRow key={student.uid}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500">
+                              {student.name.charAt(0)}
+                            </div>
+                            {student.name}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {status ? (
+                            <Badge variant={status === 'present' ? 'default' : 'destructive'} className="capitalize">
+                              {status}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-slate-400 border-slate-200">Pending</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button 
+                              size="sm" 
+                              variant={status === 'present' ? 'default' : 'outline'} 
+                              className={cn(
+                                "h-8",
+                                status === 'present' ? "bg-green-600 hover:bg-green-700" : "text-green-600 hover:bg-green-50 hover:text-green-700"
+                              )} 
+                              onClick={() => markAttendance(student.uid, 'present')}
+                            >
+                              <Check className="h-4 w-4 mr-1" /> Present
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant={status === 'absent' ? 'destructive' : 'outline'} 
+                              className={cn(
+                                "h-8",
+                                status === 'absent' ? "" : "text-red-600 hover:bg-red-50 hover:text-red-700"
+                              )} 
+                              onClick={() => markAttendance(student.uid, 'absent')}
+                            >
+                              <X className="h-4 w-4 mr-1" /> Absent
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
@@ -390,13 +749,53 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
         {!selectedClass ? (
           <div className="text-center p-12 bg-white rounded-2xl border-2 border-dashed border-slate-200">
             <GraduationCap className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-            <p className="text-slate-500">Select a class from Overview to manage grades</p>
+            <p className="text-slate-500 mb-6">Select a class to manage grades</p>
+            <div className="max-w-xs mx-auto">
+              <select 
+                className="w-full p-2 rounded-md border border-slate-200 text-sm"
+                value={selectedClass?.id || ''}
+                onChange={(e) => setSelectedClass(classes.find(c => c.id === e.target.value) || null)}
+              >
+                <option value="">Choose a class...</option>
+                {classes.map(c => (
+                  <option key={c.id} value={c.id}>{c.name} - {c.section}</option>
+                ))}
+              </select>
+            </div>
           </div>
         ) : (
           <Card className="border-none shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Grades: {selectedClass.name}</CardTitle>
-              <Button variant="outline" onClick={() => setSelectedClass(null)}>Back</Button>
+              <div>
+                <CardTitle>Grades: {selectedClass.name}</CardTitle>
+                <CardDescription>Manage and post student grades</CardDescription>
+              </div>
+              <div className="flex gap-2">
+                {Object.keys(suggestedGrades).length > 0 && (
+                  <Button 
+                    variant="default" 
+                    size="sm" 
+                    className="bg-green-600 hover:bg-green-700"
+                    onClick={applyAllSuggestions}
+                  >
+                    <CheckCircle2 className="h-4 w-4 mr-2" /> Apply All AI Suggestions
+                  </Button>
+                )}
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="text-purple-600 border-purple-200 hover:bg-purple-50"
+                  onClick={suggestGrades}
+                  disabled={isSuggesting || !examName}
+                >
+                  {isSuggesting ? (
+                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Analyzing...</>
+                  ) : (
+                    <><Sparkles className="h-4 w-4 mr-2" /> Suggest with AI</>
+                  )}
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setSelectedClass(null)}>Back</Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl">
@@ -419,25 +818,65 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {students.map((student) => (
-                    <TableRow key={student.uid}>
-                      <TableCell className="font-medium">{student.name}</TableCell>
-                      <TableCell>
-                        <Input 
-                          type="number" 
-                          className="w-24" 
-                          placeholder="Score" 
-                          onBlur={(e) => {
-                            const val = Number(e.target.value);
-                            if (val >= 0) submitGrade(student.uid, val);
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-xs text-slate-400 italic">Auto-saves on blur</span>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {students.map((student) => {
+                    const existingGrade = classGrades.find(g => g.studentId === student.uid && g.examName === examName);
+                    return (
+                      <TableRow key={student.uid}>
+                        <TableCell className="font-medium">{student.name}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Input 
+                              key={`${student.uid}_${examName}_${suggestedGrades[student.uid] || ''}`}
+                              type="number" 
+                              className={cn(
+                                "w-24",
+                                suggestedGrades[student.uid] !== undefined && !existingGrade && "border-purple-300 bg-purple-50"
+                              )} 
+                              placeholder="Score" 
+                              defaultValue={existingGrade?.score ?? suggestedGrades[student.uid]}
+                              onBlur={(e) => {
+                                const val = e.target.value === '' ? NaN : Number(e.target.value);
+                                if (!isNaN(val) && val >= 0) {
+                                  submitGrade(student.uid, val);
+                                }
+                              }}
+                            />
+                            {suggestedGrades[student.uid] !== undefined && !existingGrade && (
+                              <div className="flex items-center gap-1">
+                                <Badge variant="secondary" className="bg-purple-100 text-purple-700 border-purple-200 text-[10px]">
+                                  AI: {suggestedGrades[student.uid]}
+                                </Badge>
+                                <Button 
+                                  size="icon" 
+                                  variant="ghost" 
+                                  className="h-6 w-6 text-green-600"
+                                  onClick={() => {
+                                    submitGrade(student.uid, suggestedGrades[student.uid]);
+                                    const newSuggestions = { ...suggestedGrades };
+                                    delete newSuggestions[student.uid];
+                                    setSuggestedGrades(newSuggestions);
+                                  }}
+                                >
+                                  <Check className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {existingGrade ? (
+                              <Badge variant="outline" className="text-green-600 bg-green-50 border-green-200">
+                                <Check className="h-3 w-3 mr-1" /> Saved
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-slate-400 italic">Not entered</span>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
@@ -480,6 +919,14 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
                   onChange={e => setExamTopic(e.target.value)}
                 />
               </div>
+              <div className="space-y-2">
+                <Label>Scheduled Date</Label>
+                <Input 
+                  type="date"
+                  value={scheduledDate}
+                  onChange={e => setScheduledDate(e.target.value)}
+                />
+              </div>
               <Button 
                 className="w-full bg-purple-600 hover:bg-purple-700" 
                 onClick={generateExam}
@@ -498,11 +945,24 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
             {generatedExam && (
               <Card className="border-2 border-purple-100 shadow-md bg-purple-50/30">
                 <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle>{generatedExam.title}</CardTitle>
-                  <Button size="sm" onClick={saveExam}>
+                  <div>
+                    <CardTitle>{generatedExam.title}</CardTitle>
+                    {scheduledDate && (
+                      <CardDescription className="flex items-center gap-1 mt-1">
+                        <Calendar className="h-3 w-3" />
+                        Scheduled for: {new Date(scheduledDate).toLocaleDateString()}
+                      </CardDescription>
+                    )}
+                  </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setGeneratedExam(null)}>
+                    Discard
+                  </Button>
+                  <Button size="sm" onClick={saveExam} className="bg-purple-600 hover:bg-purple-700">
                     <Save className="h-4 w-4 mr-2" /> Save & Assign
                   </Button>
-                </CardHeader>
+                </div>
+              </CardHeader>
                 <CardContent className="space-y-4">
                   {generatedExam.questions.map((q: any, idx: number) => (
                     <div key={idx} className="p-4 bg-white rounded-lg border border-purple-100">
@@ -521,8 +981,21 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
             )}
 
             <Card className="border-none shadow-sm">
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Assigned Exams</CardTitle>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400 font-medium">Filter:</span>
+                  <select 
+                    className="text-xs p-1.5 rounded-md border border-slate-200 bg-white"
+                    value={examFilter}
+                    onChange={(e) => setExamFilter(e.target.value as any)}
+                  >
+                    <option value="all">All Status</option>
+                    <option value="upcoming">Upcoming</option>
+                    <option value="ongoing">Ongoing</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                </div>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -531,22 +1004,113 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
                       <TableHead>Exam Title</TableHead>
                       <TableHead>Subject</TableHead>
                       <TableHead>Questions</TableHead>
+                      <TableHead>Status</TableHead>
                       <TableHead>Date</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {savedExams.map((exam) => (
-                      <TableRow key={exam.id}>
-                        <TableCell className="font-medium">{exam.title}</TableCell>
-                        <TableCell>{exam.subject}</TableCell>
-                        <TableCell>{exam.questions.length}</TableCell>
-                        <TableCell>{new Date(exam.createdAt).toLocaleDateString()}</TableCell>
+                    {savedExams.filter(exam => examFilter === 'all' || exam.status === examFilter).length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-12 text-slate-500">
+                          <BrainCircuit className="h-12 w-12 text-slate-200 mx-auto mb-4" />
+                          No exams found.
+                        </TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      savedExams
+                        .filter(exam => examFilter === 'all' || exam.status === examFilter)
+                        .map((exam) => (
+                          <TableRow key={exam.id}>
+                            <TableCell className="font-medium">{exam.title}</TableCell>
+                            <TableCell>{exam.subject}</TableCell>
+                            <TableCell>{exam.questions.length}</TableCell>
+                            <TableCell>
+                              <div className="relative inline-block">
+                                <select 
+                                  className={cn(
+                                    "text-[10px] font-bold uppercase tracking-wider py-1 px-3 rounded-full border-none cursor-pointer focus:ring-2 focus:ring-offset-1 appearance-none transition-colors",
+                                    exam.status === 'completed' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 
+                                    exam.status === 'ongoing' ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 
+                                    'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                  )}
+                                  value={exam.status}
+                                  onChange={(e) => updateExamStatus(exam.id, e.target.value as any)}
+                                >
+                                  <option value="upcoming" className="bg-white text-slate-900">Upcoming</option>
+                                  <option value="ongoing" className="bg-white text-slate-900">Ongoing</option>
+                                  <option value="completed" className="bg-white text-slate-900">Completed</option>
+                                </select>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="font-medium">
+                                  {exam.scheduledDate ? new Date(exam.scheduledDate).toLocaleDateString() : new Date(exam.createdAt).toLocaleDateString()}
+                                </span>
+                                {exam.scheduledDate && (
+                                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-tighter">
+                                    Scheduled
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2">
+                                <Button variant="ghost" size="icon" onClick={() => setViewingExam(exam)}>
+                                  <Eye className="h-4 w-4 text-slate-500" />
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={() => deleteExam(exam.id)}>
+                                  <Trash2 className="h-4 w-4 text-red-500" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                    )}
                   </TableBody>
                 </Table>
               </CardContent>
             </Card>
+
+            {viewingExam && (
+              <Dialog open={!!viewingExam} onOpenChange={() => setViewingExam(null)}>
+                <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>{viewingExam.title}</DialogTitle>
+                    <CardDescription className="flex items-center gap-4 mt-1">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        Created: {new Date(viewingExam.createdAt).toLocaleDateString()}
+                      </span>
+                      {viewingExam.scheduledDate && (
+                        <span className="flex items-center gap-1 text-primary font-medium">
+                          <Clock className="h-3 w-3" />
+                          Scheduled: {new Date(viewingExam.scheduledDate).toLocaleDateString()}
+                        </span>
+                      )}
+                    </CardDescription>
+                  </DialogHeader>
+                  <div className="space-y-6 mt-4">
+                    {viewingExam.questions.map((q, idx) => (
+                      <div key={idx} className="space-y-3">
+                        <p className="font-medium">{idx + 1}. {q.question}</p>
+                        <div className="grid grid-cols-1 gap-2">
+                          {q.options.map((opt, oIdx) => (
+                            <div key={oIdx} className={cn(
+                              "p-3 rounded-lg border text-sm",
+                              opt === q.correctAnswer ? "bg-green-50 border-green-200 text-green-700 font-medium" : "bg-slate-50 border-slate-100"
+                            )}>
+                              {opt} {opt === q.correctAnswer && "(Correct Answer)"}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
           </div>
         </div>
       </div>
@@ -611,51 +1175,7 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
   }
 
   if (activeTab === 'profile') {
-    return (
-      <div className="max-w-2xl mx-auto space-y-8">
-        <Card className="border-none shadow-sm">
-          <CardHeader>
-            <CardTitle>Your Profile</CardTitle>
-            <CardDescription>Manage your professional information</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="flex items-center gap-6 p-6 bg-slate-50 rounded-2xl">
-              <div className="h-24 w-24 rounded-full bg-primary/10 flex items-center justify-center text-3xl font-bold text-primary">
-                {user.name.charAt(0)}
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-2xl font-bold">{user.name}</h3>
-                <p className="text-slate-500">{user.email}</p>
-                <Badge className="mt-2">Faculty Member</Badge>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Full Name</Label>
-                <Input value={user.name} disabled />
-              </div>
-              <div className="space-y-2">
-                <Label>Email Address</Label>
-                <Input value={user.email} disabled />
-              </div>
-              <div className="space-y-2">
-                <Label>Assigned Classes</Label>
-                <Input value={classes.length} disabled />
-              </div>
-              <div className="space-y-2">
-                <Label>Role</Label>
-                <Input value="Teacher" disabled />
-              </div>
-            </div>
-            
-            <div className="pt-6 border-t">
-              <p className="text-xs text-slate-400 italic">Profile editing is managed via your Google Account.</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
+    return <ProfileManagement user={user} description="Manage your professional profile and contact details" />;
   }
 
   return <div className="text-slate-500 italic">Module coming soon...</div>;

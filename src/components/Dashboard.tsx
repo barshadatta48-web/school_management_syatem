@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { UserProfile, logout } from '../lib/firebase';
 import { Button } from './ui/button';
 import { 
@@ -16,9 +16,11 @@ import {
   BrainCircuit
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useLocation, useNavigate } from 'react-router-dom';
 import AdminDashboard from '../pages/AdminDashboard';
 import TeacherDashboard from '../pages/TeacherDashboard';
 import StudentDashboard from '../pages/StudentDashboard';
+import SettingsManagement from './SettingsManagement';
 
 interface DashboardProps {
   user: UserProfile;
@@ -26,7 +28,35 @@ interface DashboardProps {
 
 export default function Dashboard({ user }: DashboardProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState('overview');
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const getActiveTabFromPath = () => {
+    const parts = location.pathname.split('/');
+    const tab = parts[parts.length - 1];
+    if (tab === 'home') return 'overview';
+    return tab || 'overview';
+  };
+
+  const [activeTab, setActiveTab] = useState(getActiveTabFromPath());
+
+  useEffect(() => {
+    setActiveTab(getActiveTabFromPath());
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const handleTabChange = (e: any) => {
+      onTabClick(e.detail);
+    };
+    window.addEventListener('changeTab', handleTabChange);
+    return () => window.removeEventListener('changeTab', handleTabChange);
+  }, []);
+
+  const onTabClick = (tab: string) => {
+    const base = user.role === 'admin' ? '/admin' : user.role === 'teacher' ? '/staff' : '/portal';
+    const path = tab === 'overview' ? `${base}/home` : `${base}/${tab}`;
+    navigate(path);
+  };
 
   const menuItems = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard, roles: ['admin', 'teacher', 'student'] },
@@ -34,19 +64,22 @@ export default function Dashboard({ user }: DashboardProps) {
     { id: 'classes', label: 'Classes', icon: BookOpen, roles: ['admin', 'teacher'] },
     { id: 'attendance', label: 'Attendance', icon: CalendarCheck, roles: ['admin', 'teacher', 'student'] },
     { id: 'grades', label: 'Grades', icon: GraduationCap, roles: ['admin', 'teacher', 'student'] },
-    { id: 'exams', label: 'Exams', icon: BrainCircuit, roles: ['teacher', 'student'] },
+    { id: 'exams', label: 'Exams', icon: BrainCircuit, roles: ['admin', 'teacher', 'student'] },
     { id: 'schedule', label: 'Schedule', icon: Calendar, roles: ['student'] },
     { id: 'resources', label: 'Resources', icon: BookOpen, roles: ['student'] },
     { id: 'students', label: 'My Students', icon: Users, roles: ['teacher'] },
-    { id: 'profile', label: 'Profile', icon: Settings, roles: ['admin', 'teacher', 'student'] },
   ];
 
   const filteredMenu = menuItems.filter(item => item.roles.includes(user.role));
 
   const renderContent = () => {
+    if (activeTab === 'settings') {
+      return <SettingsManagement user={user} />;
+    }
+
     switch (user.role) {
       case 'admin':
-        return <AdminDashboard activeTab={activeTab} />;
+        return <AdminDashboard activeTab={activeTab} user={user} />;
       case 'teacher':
         return <TeacherDashboard activeTab={activeTab} user={user} />;
       case 'student':
@@ -69,7 +102,7 @@ export default function Dashboard({ user }: DashboardProps) {
           {isSidebarOpen && (
             <div className="flex items-center gap-2">
               <GraduationCap className="h-8 w-8 text-primary" />
-              <span className="font-bold text-xl tracking-tight">EduFlow</span>
+              <span className="font-bold text-xl tracking-tight">Dashboard</span>
             </div>
           )}
           <Button 
@@ -91,7 +124,7 @@ export default function Dashboard({ user }: DashboardProps) {
                 "w-full justify-start gap-4 h-12",
                 !isSidebarOpen && "justify-center px-0"
               )}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => onTabClick(item.id)}
             >
               <item.icon className="h-5 w-5 shrink-0" />
               {isSidebarOpen && <span>{item.label}</span>}
@@ -122,20 +155,29 @@ export default function Dashboard({ user }: DashboardProps) {
             {activeTab.replace('-', ' ')}
           </h2>
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" className="text-slate-500">
-              <Bell className="h-5 w-5" />
-            </Button>
-            <Button variant="ghost" size="icon" className="text-slate-500">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className={cn("text-slate-500", activeTab === 'settings' && "text-primary bg-primary/10")}
+              onClick={() => onTabClick('settings')}
+            >
               <Settings className="h-5 w-5" />
             </Button>
             <div className="h-8 w-px bg-slate-200 mx-2" />
-            <div className="flex items-center gap-3">
+            <div 
+              className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 p-1.5 rounded-lg transition-colors"
+              onClick={() => onTabClick('settings')}
+            >
               <div className="text-right hidden sm:block">
                 <p className="text-sm font-medium text-slate-900">{user.name}</p>
                 <p className="text-xs text-slate-500 capitalize">{user.role}</p>
               </div>
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
-                {user.name.charAt(0)}
+              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold overflow-hidden border border-slate-200">
+                {user.photoURL ? (
+                  <img src={user.photoURL} alt={user.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  user.name.charAt(0)
+                )}
               </div>
             </div>
           </div>

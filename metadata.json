@@ -1,5 +1,5 @@
 {
-  "name": "EduFlow",
+  "name": "Dashboard",
   "description": "A comprehensive school management system with role-based dashboards for Admins, Teachers, and Students. Features include user management, class scheduling, attendance tracking, and grade management.",
   "requestFramePermissions": []
 }
