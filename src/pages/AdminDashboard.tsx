@@ -508,7 +508,7 @@ export default function AdminDashboard({ activeTab, user }: AdminDashboardProps)
                   </TableCell>
                   <TableCell>
                     <Select 
-                      defaultValue={user.role} 
+                      value={user.role} 
                       onValueChange={(val) => handleRoleChange(user.uid, val as any)}
                     >
                       <SelectTrigger className="w-[130px]">
@@ -565,7 +565,7 @@ export default function AdminDashboard({ activeTab, user }: AdminDashboardProps)
                 </div>
                 <div className="space-y-2">
                   <Label>Assign Teacher</Label>
-                  <Select onValueChange={val => setNewClass({...newClass, teacherId: val})}>
+                  <Select value={newClass.teacherId} onValueChange={val => setNewClass({...newClass, teacherId: val})}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select Teacher" />
                     </SelectTrigger>
@@ -640,7 +640,7 @@ export default function AdminDashboard({ activeTab, user }: AdminDashboardProps)
 
                 <div className="pt-4 border-t mt-auto">
                   <Label className="text-[10px] uppercase font-bold text-slate-400 mb-2 block">Add Student</Label>
-                  <Select onValueChange={(val: string) => assignStudentToClass(cls.id, val)}>
+                  <Select value="" onValueChange={(val: string) => assignStudentToClass(cls.id, val)}>
                     <SelectTrigger className="h-9 text-xs">
                       <SelectValue placeholder="Select Student" />
                     </SelectTrigger>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { loginWithGoogle, loginWithEmail, registerWithEmail, UserProfile } from '../lib/firebase';
+import { loginWithGoogle, loginWithEmail, registerWithEmail, UserProfile, auth } from '../lib/firebase';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -16,8 +16,9 @@ export default function Login({ onMockLogin }: LoginProps) {
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState('password123');
   const [role, setRole] = useState<'admin' | 'teacher' | 'student'>('student');
+  const [isAutoAuth, setIsAutoAuth] = useState(true);
 
   const handleGoogleLogin = async () => {
     setLoading(true);
@@ -40,6 +41,23 @@ export default function Login({ onMockLogin }: LoginProps) {
 
     setLoading(true);
     try {
+      if (isAutoAuth) {
+        // Try to login with default password, if fails, register
+        try {
+          localStorage.setItem('pending_role', role);
+          await loginWithEmail(email, password || 'password123');
+          toast.success("Logged in successfully!");
+        } catch (err: any) {
+          if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+            await registerWithEmail(email, password || 'password123');
+            toast.success("Account created and logged in!");
+          } else {
+            throw err;
+          }
+        }
+        return;
+      }
+
       if (isSignUp) {
         localStorage.setItem('pending_role', role);
         await registerWithEmail(email, password);
@@ -93,6 +111,23 @@ export default function Login({ onMockLogin }: LoginProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          <div className="flex items-center justify-center gap-4 mb-4">
+            <Button 
+              variant={isAutoAuth ? "default" : "outline"} 
+              onClick={() => setIsAutoAuth(true)}
+              className="flex-1"
+            >
+              Quick Access
+            </Button>
+            <Button 
+              variant={!isAutoAuth ? "default" : "outline"} 
+              onClick={() => setIsAutoAuth(false)}
+              className="flex-1"
+            >
+              Secure Auth
+            </Button>
+          </div>
+
           <form onSubmit={handleEmailLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email Address</Label>
@@ -109,23 +144,26 @@ export default function Login({ onMockLogin }: LoginProps) {
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                <Input 
-                  id="password"
-                  type="password" 
-                  placeholder="••••••••" 
-                  className="pl-10"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
+            
+            {!isAutoAuth && (
+              <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                  <Input 
+                    id="password"
+                    type="password" 
+                    placeholder="••••••••" 
+                    className="pl-10"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
-            {isSignUp && (
+            {(isSignUp || isAutoAuth) && (
               <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
                 <Label>Select Your Role</Label>
                 <Select value={role} onValueChange={(val: any) => setRole(val)}>
@@ -154,21 +192,23 @@ export default function Login({ onMockLogin }: LoginProps) {
               ) : (
                 <>
                   <LogIn className="mr-2 h-4 w-4" />
-                  {isSignUp ? 'Create Account' : 'Sign In'}
+                  {isAutoAuth ? 'Enter Dashboard' : (isSignUp ? 'Create Account' : 'Sign In')}
                 </>
               )}
             </Button>
           </form>
 
-          <div className="text-center">
-            <button 
-              type="button"
-              onClick={() => setIsSignUp(!isSignUp)}
-              className="text-sm text-primary hover:underline font-medium"
-            >
-              {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
-            </button>
-          </div>
+          {!isAutoAuth && (
+            <div className="text-center">
+              <button 
+                type="button"
+                onClick={() => setIsSignUp(!isSignUp)}
+                className="text-sm text-primary hover:underline font-medium"
+              >
+                {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+              </button>
+            </div>
+          )}
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
@@ -205,6 +245,26 @@ export default function Login({ onMockLogin }: LoginProps) {
                 />
               </svg>
               Google Account
+            </Button>
+
+            <Button 
+              variant="ghost"
+              onClick={async () => {
+                setLoading(true);
+                try {
+                  const { signInAnonymously } = await import('firebase/auth');
+                  await signInAnonymously(auth);
+                  toast.success("Logged in as Guest!");
+                } catch (error) {
+                  toast.error("Guest login failed.");
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              disabled={loading}
+              className="w-full h-11 text-slate-500"
+            >
+              Continue as Guest
             </Button>
 
             <div className="pt-4 border-t border-slate-100 mt-2">
