@@ -8,7 +8,7 @@ import { Button, buttonVariants } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { toast } from 'sonner';
-import { GraduationCap, Calendar, TrendingUp, BookOpen, Megaphone, Clock, ExternalLink, Users, BrainCircuit, CalendarCheck, Plus, Trash2, Edit2, MapPin, User, Check, X } from 'lucide-react';
+import { GraduationCap, Calendar, TrendingUp, BookOpen, Megaphone, Clock, ExternalLink, Users, ClipboardList, CalendarCheck, Plus, Trash2, Edit2, MapPin, User, Check, X } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { cn } from '../lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../components/ui/dialog';
@@ -374,7 +374,7 @@ export default function StudentDashboard({ activeTab, user }: StudentDashboardPr
             <Card className="border-none shadow-sm h-fit">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <BrainCircuit className="h-5 w-5 text-purple-500" />
+                  <ClipboardList className="h-5 w-5 text-purple-500" />
                   Upcoming Exams
                 </CardTitle>
               </CardHeader>

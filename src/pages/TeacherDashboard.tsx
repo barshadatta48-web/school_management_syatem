@@ -9,7 +9,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { toast } from 'sonner';
-import { Check, X, Calendar, GraduationCap, BrainCircuit, Loader2, Save, Megaphone, BookOpen, Users, Eye, Trash2, Info, CheckCircle2, Sparkles, Wand2, Clock, TrendingUp } from 'lucide-react';
+import { Check, X, Calendar, GraduationCap, ClipboardList, Loader2, Save, Megaphone, BookOpen, Users, Eye, Trash2, Info, CheckCircle2, Sparkles, Wand2, Clock, TrendingUp } from 'lucide-react';
 import { GoogleGenAI, Type } from "@google/genai";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { cn } from '../lib/utils';
@@ -43,6 +43,7 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
   // Attendance Management State
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
   const [currentAttendance, setCurrentAttendance] = useState<AttendanceRecord | null>(null);
+  const [allClassAttendance, setAllClassAttendance] = useState<AttendanceRecord[]>([]);
 
   // AI Grade Suggestion State
   const [isSuggesting, setIsSuggesting] = useState(false);
@@ -131,6 +132,18 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
       return () => unsubscribe();
     }
   }, [selectedClass, attendanceDate]);
+
+  useEffect(() => {
+    if (selectedClass) {
+      const q = query(collection(db, 'attendance'), where('classId', '==', selectedClass.id));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        setAllClassAttendance(snapshot.docs.map(doc => doc.data() as AttendanceRecord));
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'attendance');
+      });
+      return () => unsubscribe();
+    }
+  }, [selectedClass]);
 
   const generateExam = async () => {
     if (!examTopic || !selectedClass) {
@@ -229,7 +242,10 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
         id: attendanceId,
         classId: selectedClass.id,
         date: attendanceDate,
-        records: { [studentId]: status }
+        records: {
+          ...(currentAttendance?.records || {}),
+          [studentId]: status
+        }
       }, { merge: true });
       toast.success(`Marked ${status}`);
     } catch (error) {
@@ -503,7 +519,7 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
                   <span className="text-[10px] font-bold uppercase">Submit Grades</span>
                 </Button>
                 <Button variant="outline" className="h-20 flex flex-col gap-2" onClick={() => {}}>
-                  <BrainCircuit className="h-5 w-5 text-purple-500" />
+                  <ClipboardList className="h-5 w-5 text-purple-500" />
                   <span className="text-[10px] font-bold uppercase">AI Exam Gen</span>
                 </Button>
                 <Button variant="outline" className="h-20 flex flex-col gap-2" onClick={() => {}}>
@@ -556,7 +572,7 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
             <Card className="border-none shadow-sm h-fit">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <BrainCircuit className="h-5 w-5 text-purple-500" />
+                  <ClipboardList className="h-5 w-5 text-purple-500" />
                   Active Exams
                 </CardTitle>
               </CardHeader>
@@ -623,6 +639,19 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
   }
 
   if (activeTab === 'attendance') {
+    const presentToday = currentAttendance ? Object.values(currentAttendance.records).filter(s => s === 'present').length : 0;
+    const absentToday = currentAttendance ? Object.values(currentAttendance.records).filter(s => s === 'absent').length : 0;
+    
+    const totalAttendanceRecords = allClassAttendance.reduce((acc, curr) => {
+      const dayTotal = Object.keys(curr.records).length;
+      const dayPresent = Object.values(curr.records).filter(s => s === 'present').length;
+      return { total: acc.total + dayTotal, present: acc.present + dayPresent };
+    }, { total: 0, present: 0 });
+
+    const overallPercentage = totalAttendanceRecords.total > 0 
+      ? Math.round((totalAttendanceRecords.present / totalAttendanceRecords.total) * 100) 
+      : 0;
+
     return (
       <div className="space-y-6">
         {!selectedClass ? (
@@ -643,8 +672,56 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
             </div>
           </div>
         ) : (
-          <Card className="border-none shadow-sm">
-            <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card className="border-none shadow-sm bg-white">
+                <CardContent className="p-4 flex items-center gap-4">
+                  <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center">
+                    <Users className="h-5 w-5 text-blue-500" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-slate-400">Total Students</p>
+                    <p className="text-xl font-bold text-slate-900">{students.length}</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-none shadow-sm bg-white">
+                <CardContent className="p-4 flex items-center gap-4">
+                  <div className="h-10 w-10 rounded-full bg-green-50 flex items-center justify-center">
+                    <CheckCircle2 className="h-5 w-5 text-green-500" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-slate-400">Present Today</p>
+                    <p className="text-xl font-bold text-slate-900">{presentToday}</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-none shadow-sm bg-white">
+                <CardContent className="p-4 flex items-center gap-4">
+                  <div className="h-10 w-10 rounded-full bg-red-50 flex items-center justify-center">
+                    <X className="h-5 w-5 text-red-500" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-slate-400">Absent Today</p>
+                    <p className="text-xl font-bold text-slate-900">{absentToday}</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-none shadow-sm bg-white">
+                <CardContent className="p-4 flex items-center gap-4">
+                  <div className="h-10 w-10 rounded-full bg-purple-50 flex items-center justify-center">
+                    <TrendingUp className="h-5 w-5 text-purple-500" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-slate-400">Overall Attendance</p>
+                    <p className="text-xl font-bold text-slate-900">{overallPercentage}%</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card className="border-none shadow-sm">
+              <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <CardTitle className="text-slate-900">Mark Attendance</CardTitle>
                 <CardDescription>Record daily presence for your students</CardDescription>
@@ -728,6 +805,7 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
               </Table>
             </CardContent>
           </Card>
+          </div>
         )}
       </div>
     );
@@ -881,7 +959,7 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
           <Card className="lg:col-span-1 border-none shadow-sm h-fit">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <BrainCircuit className="h-5 w-5 text-purple-500" />
+                <ClipboardList className="h-5 w-5 text-purple-500" />
                 AI Exam Generator
               </CardTitle>
             </CardHeader>
@@ -1001,7 +1079,7 @@ export default function TeacherDashboard({ activeTab, user }: TeacherDashboardPr
                     {savedExams.filter(exam => examFilter === 'all' || exam.status === examFilter).length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center py-12 text-slate-500">
-                          <BrainCircuit className="h-12 w-12 text-slate-200 mx-auto mb-4" />
+                          <ClipboardList className="h-12 w-12 text-slate-200 mx-auto mb-4" />
                           No exams found.
                         </TableCell>
                       </TableRow>

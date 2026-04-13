@@ -11,7 +11,7 @@ import {
   X,
   Calendar,
   Settings,
-  BrainCircuit,
+  ClipboardList,
   User,
   LogOut
 } from 'lucide-react';
@@ -67,7 +67,7 @@ export default function Dashboard({ user }: DashboardProps) {
     { id: 'classes', label: t('classes') || 'Classes', icon: BookOpen, roles: ['admin', 'teacher'] },
     { id: 'attendance', label: t('attendance'), icon: CalendarCheck, roles: ['admin', 'teacher', 'student'] },
     { id: 'grades', label: t('grades'), icon: GraduationCap, roles: ['admin', 'teacher', 'student'] },
-    { id: 'exams', label: t('exams'), icon: BrainCircuit, roles: ['admin', 'teacher', 'student'] },
+    { id: 'exams', label: t('exams'), icon: ClipboardList, roles: ['admin', 'teacher', 'student'] },
     { id: 'schedule', label: t('schedule'), icon: Calendar, roles: ['student'] },
     { id: 'resources', label: t('resources') || 'Resources', icon: BookOpen, roles: ['student'] },
     { id: 'students', label: t('students') || 'My Students', icon: Users, roles: ['teacher'] },

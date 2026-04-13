@@ -9,7 +9,7 @@ import { Button, buttonVariants } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
-import { Users, BookOpen, GraduationCap, ShieldAlert, Plus, X, Megaphone, Trash2, Search, CalendarCheck, Calendar, BrainCircuit, CheckCircle2, XCircle, HelpCircle, ArrowLeft, Clock, Eye, Check } from 'lucide-react';
+import { Users, BookOpen, GraduationCap, ShieldAlert, Plus, X, Megaphone, Trash2, Search, CalendarCheck, Calendar, ClipboardList, CheckCircle2, XCircle, HelpCircle, ArrowLeft, Clock, Eye, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -339,7 +339,7 @@ export default function AdminDashboard({ activeTab, user }: AdminDashboardProps)
                   <span className="text-[10px] font-bold uppercase">{t('manageClasses') || 'Manage Classes'}</span>
                 </Button>
                 <Button variant="outline" className="h-20 flex flex-col gap-2 dark:border-slate-700 dark:hover:bg-slate-800" onClick={() => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'exams' }))}>
-                  <BrainCircuit className="h-5 w-5 text-purple-500" />
+                  <ClipboardList className="h-5 w-5 text-purple-500" />
                   <span className="text-[10px] font-bold uppercase">{t('manageExams') || 'Manage Exams'}</span>
                 </Button>
                 <Button variant="outline" className="h-20 flex flex-col gap-2 dark:border-slate-700 dark:hover:bg-slate-800" onClick={() => setIsAnnounceDialogOpen(true)}>
@@ -1096,7 +1096,7 @@ export default function AdminDashboard({ activeTab, user }: AdminDashboardProps)
                 {exams.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-12 text-slate-500">
-                      <BrainCircuit className="h-12 w-12 text-slate-200 mx-auto mb-4" />
+                      <ClipboardList className="h-12 w-12 text-slate-200 mx-auto mb-4" />
                       No exams scheduled yet.
                     </TableCell>
                   </TableRow>
