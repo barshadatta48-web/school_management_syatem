@@ -115,14 +115,15 @@ export interface UserProfile {
   createdAt: string;
   phone?: string;
   bio?: string;
-  address?: string;
+  class?: string;
   photoURL?: string;
   // Teacher specific
   department?: string;
   subjects?: string[];
   // Student specific
-  grade?: string;
   section?: string;
+  academyName?: string;
+  rollNo?: string;
 }
 
 export interface StudentProfile {

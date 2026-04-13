@@ -14,6 +14,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { cn } from '../lib/utils';
 import ProfileManagement from '../components/ProfileManagement';
+import { useAppContext } from '../context/AppContext';
 
 interface TeacherDashboardProps {
   activeTab: string;
@@ -21,6 +22,7 @@ interface TeacherDashboardProps {
 }
 
 export default function TeacherDashboard({ activeTab, user }: TeacherDashboardProps) {
+  const { t } = useAppContext();
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [selectedClass, setSelectedClass] = useState<ClassData | null>(null);
   const [students, setStudents] = useState<UserProfile[]>([]);

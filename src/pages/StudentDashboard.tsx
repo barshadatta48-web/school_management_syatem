@@ -14,6 +14,7 @@ import { cn } from '../lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Textarea } from '../components/ui/textarea';
+import { useAppContext } from '../context/AppContext';
 
 import ProfileManagement from '../components/ProfileManagement';
 
@@ -23,6 +24,7 @@ interface StudentDashboardProps {
 }
 
 export default function StudentDashboard({ activeTab, user }: StudentDashboardProps) {
+  const { t } = useAppContext();
   const [grades, setGrades] = useState<GradeRecord[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);

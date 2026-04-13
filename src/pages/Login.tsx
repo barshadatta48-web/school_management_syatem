@@ -7,12 +7,14 @@ import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { GraduationCap, LogIn, Mail, Lock, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAppContext } from '../context/AppContext';
 
 interface LoginProps {
   onMockLogin: (user: UserProfile) => void;
 }
 
 export default function Login({ onMockLogin }: LoginProps) {
+  const { t, darkMode } = useAppContext();
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
@@ -99,14 +101,14 @@ export default function Login({ onMockLogin }: LoginProps) {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-100 to-slate-200 p-4">
-      <Card className="w-full max-w-md border-none shadow-2xl bg-white/80 backdrop-blur-md">
+    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-900 dark:to-slate-950 p-4 transition-colors duration-300">
+      <Card className="w-full max-w-md border-none shadow-2xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-md">
         <CardHeader className="text-center space-y-2">
           <div className="mx-auto bg-primary/10 p-4 rounded-2xl w-fit mb-2">
             <GraduationCap className="h-10 w-10 text-primary" />
           </div>
-          <CardTitle className="text-3xl font-bold tracking-tight text-slate-900">EduFlow</CardTitle>
-          <CardDescription className="text-slate-500">
+          <CardTitle className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">EduFlow</CardTitle>
+          <CardDescription className="text-slate-500 dark:text-slate-400">
             The complete school management system
           </CardDescription>
         </CardHeader>
@@ -130,14 +132,14 @@ export default function Login({ onMockLogin }: LoginProps) {
 
           <form onSubmit={handleEmailLogin} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email Address</Label>
+              <Label htmlFor="email" className="dark:text-slate-200">{t('emailAddress') || 'Email Address'}</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                 <Input 
                   id="email"
                   type="email" 
                   placeholder="name@school.edu" 
-                  className="pl-10"
+                  className="pl-10 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -165,18 +167,18 @@ export default function Login({ onMockLogin }: LoginProps) {
 
             {(isSignUp || isAutoAuth) && (
               <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                <Label>Select Your Role</Label>
+                <Label className="dark:text-slate-200">{t('selectRole') || 'Select Your Role'}</Label>
                 <Select value={role} onValueChange={(val: any) => setRole(val)}>
-                  <SelectTrigger className="w-full h-11">
+                  <SelectTrigger className="w-full h-11 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200">
                     <div className="flex items-center gap-2">
                       <ShieldCheck className="h-4 w-4 text-slate-400" />
                       <SelectValue placeholder="Select a role" />
                     </div>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="admin">Administrator</SelectItem>
-                    <SelectItem value="teacher">Teacher</SelectItem>
-                    <SelectItem value="student">Student</SelectItem>
+                    <SelectItem value="admin">{t('admin') || 'Administrator'}</SelectItem>
+                    <SelectItem value="teacher">{t('teacher') || 'Teacher'}</SelectItem>
+                    <SelectItem value="student">{t('student') || 'Student'}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -7,16 +7,13 @@ import {
   BookOpen, 
   CalendarCheck, 
   GraduationCap, 
-  LogOut,
   Menu,
   X,
   Calendar,
   Settings,
-  Bell,
   BrainCircuit,
   User,
-  Shield,
-  Lock
+  LogOut
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -24,21 +21,14 @@ import AdminDashboard from '../pages/AdminDashboard';
 import TeacherDashboard from '../pages/TeacherDashboard';
 import StudentDashboard from '../pages/StudentDashboard';
 import SettingsManagement from './SettingsManagement';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
+import { useAppContext } from '../context/AppContext';
 
 interface DashboardProps {
   user: UserProfile;
 }
 
 export default function Dashboard({ user }: DashboardProps) {
+  const { t } = useAppContext();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const location = useLocation();
   const navigate = useNavigate();
@@ -72,15 +62,15 @@ export default function Dashboard({ user }: DashboardProps) {
   };
 
   const menuItems = [
-    { id: 'overview', label: 'Overview', icon: LayoutDashboard, roles: ['admin', 'teacher', 'student'] },
-    { id: 'users', label: 'Users', icon: Users, roles: ['admin'] },
-    { id: 'classes', label: 'Classes', icon: BookOpen, roles: ['admin', 'teacher'] },
-    { id: 'attendance', label: 'Attendance', icon: CalendarCheck, roles: ['admin', 'teacher', 'student'] },
-    { id: 'grades', label: 'Grades', icon: GraduationCap, roles: ['admin', 'teacher', 'student'] },
-    { id: 'exams', label: 'Exams', icon: BrainCircuit, roles: ['admin', 'teacher', 'student'] },
-    { id: 'schedule', label: 'Schedule', icon: Calendar, roles: ['student'] },
-    { id: 'resources', label: 'Resources', icon: BookOpen, roles: ['student'] },
-    { id: 'students', label: 'My Students', icon: Users, roles: ['teacher'] },
+    { id: 'overview', label: t('dashboard'), icon: LayoutDashboard, roles: ['admin', 'teacher', 'student'] },
+    { id: 'users', label: t('users') || 'Users', icon: Users, roles: ['admin'] },
+    { id: 'classes', label: t('classes') || 'Classes', icon: BookOpen, roles: ['admin', 'teacher'] },
+    { id: 'attendance', label: t('attendance'), icon: CalendarCheck, roles: ['admin', 'teacher', 'student'] },
+    { id: 'grades', label: t('grades'), icon: GraduationCap, roles: ['admin', 'teacher', 'student'] },
+    { id: 'exams', label: t('exams'), icon: BrainCircuit, roles: ['admin', 'teacher', 'student'] },
+    { id: 'schedule', label: t('schedule'), icon: Calendar, roles: ['student'] },
+    { id: 'resources', label: t('resources') || 'Resources', icon: BookOpen, roles: ['student'] },
+    { id: 'students', label: t('students') || 'My Students', icon: Users, roles: ['teacher'] },
   ];
 
   const filteredMenu = menuItems.filter(item => item.roles.includes(user.role));
@@ -115,14 +105,14 @@ export default function Dashboard({ user }: DashboardProps) {
           {isSidebarOpen && (
             <div className="flex items-center gap-2">
               <GraduationCap className="h-8 w-8 text-primary" />
-              <span className="font-bold text-xl tracking-tight">Dashboard</span>
+              <span className="font-bold text-xl tracking-tight dark:text-white">{t('dashboard')}</span>
             </div>
           )}
           <Button 
             variant="ghost" 
             size="icon" 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="ml-auto"
+            className="ml-auto dark:text-slate-400"
           >
             {isSidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
@@ -145,96 +135,61 @@ export default function Dashboard({ user }: DashboardProps) {
           ))}
         </nav>
 
-        <div className="p-4 border-t border-slate-100">
+        <div className="p-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
           <Button 
             variant="ghost" 
             className={cn(
-              "w-full justify-start gap-4 text-slate-500 hover:text-red-600 hover:bg-red-50",
+              "w-full justify-start gap-4 text-slate-500",
+              !isSidebarOpen && "justify-center px-0"
+            )}
+            onClick={() => { setSettingsTab('preferences'); onTabClick('settings'); }}
+          >
+            <Settings className="h-5 w-5 shrink-0" />
+            {isSidebarOpen && <span>{t('settings')}</span>}
+          </Button>
+          <Button 
+            variant="ghost" 
+            className={cn(
+              "w-full justify-start gap-4 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/10",
               !isSidebarOpen && "justify-center px-0"
             )}
             onClick={logout}
           >
             <LogOut className="h-5 w-5 shrink-0" />
-            {isSidebarOpen && <span>Logout</span>}
+            {isSidebarOpen && <span>{t('logout')}</span>}
           </Button>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden dark:bg-slate-950">
         {/* Header */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
-          <h2 className="text-lg font-semibold text-slate-800 capitalize">
-            {activeTab.replace('-', ' ')}
+        <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-8 shrink-0">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200 capitalize">
+            {activeTab === 'settings' ? t('profile') : (t(activeTab) || activeTab.replace('-', ' '))}
           </h2>
           <div className="flex items-center gap-4">
-            <DropdownMenu>
-              <DropdownMenuTrigger 
-                render={
-                  <button 
-                    type="button"
-                    className={cn(
-                      buttonVariants({ variant: "ghost", size: "icon" }),
-                      "text-slate-500", 
-                      activeTab === 'settings' && (settingsTab === 'preferences' || settingsTab === 'security') && "text-primary bg-primary/10"
-                    )}
-                  >
-                    <Settings className="h-5 w-5" />
-                  </button>
-                }
-              />
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>Settings</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => { setSettingsTab('preferences'); onTabClick('settings'); }}>
-                    <Bell className="mr-2 h-4 w-4" />
-                    <span>Preferences</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => { setSettingsTab('security'); onTabClick('settings'); }}>
-                    <Shield className="mr-2 h-4 w-4" />
-                    <span>Security</span>
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="h-8 w-px bg-slate-200 dark:bg-slate-800 mx-2" />
 
-            <div className="h-8 w-px bg-slate-200 mx-2" />
-
-            <DropdownMenu>
-              <DropdownMenuTrigger 
-                render={
-                  <button type="button" className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 p-1.5 rounded-lg transition-colors outline-none">
-                    <div className="text-right hidden sm:block">
-                      <p className="text-sm font-medium text-slate-900">{user.name}</p>
-                      <p className="text-xs text-slate-500 capitalize">{user.role}</p>
-                    </div>
-                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold overflow-hidden border border-slate-200">
-                      {user.photoURL ? (
-                        <img src={user.photoURL} alt={user.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
-                      ) : (
-                        user.name.charAt(0)
-                      )}
-                    </div>
-                  </button>
-                }
-              />
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => { setSettingsTab('profile'); onTabClick('settings'); }}>
-                    <User className="mr-2 h-4 w-4" />
-                    <span>Profile</span>
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={logout} className="text-red-600 focus:text-red-600 focus:bg-red-50">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Logout</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <button 
+              type="button" 
+              className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 p-1.5 rounded-lg transition-colors outline-none"
+              onClick={() => { setSettingsTab('profile'); onTabClick('settings'); }}
+            >
+              <div className="text-right hidden sm:block">
+                <p className="text-sm font-medium text-slate-900 dark:text-slate-200">{user.name}</p>
+                <p className="text-[10px] text-slate-500 capitalize">
+                  {user.role} {user.academyName ? `• ${user.academyName}` : ''}
+                </p>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold overflow-hidden border border-slate-200 dark:border-slate-700">
+                {user.photoURL ? (
+                  <img src={user.photoURL} alt={user.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  user.name.charAt(0)
+                )}
+              </div>
+            </button>
           </div>
         </header>
 

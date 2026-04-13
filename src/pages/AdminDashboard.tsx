@@ -13,6 +13,7 @@ import { Users, BookOpen, GraduationCap, ShieldAlert, Plus, X, Megaphone, Trash2
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { useAppContext } from '../context/AppContext';
 
 import ProfileManagement from '../components/ProfileManagement';
 
@@ -22,6 +23,7 @@ interface AdminDashboardProps {
 }
 
 export default function AdminDashboard({ activeTab, user }: AdminDashboardProps) {
+  const { t } = useAppContext();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -294,10 +296,10 @@ export default function AdminDashboard({ activeTab, user }: AdminDashboardProps)
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="lg:col-span-2 border-none shadow-sm">
+          <Card className="lg:col-span-2 border-none shadow-sm dark:bg-slate-900">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Recent Activity</CardTitle>
-              <Badge variant="outline" className="bg-white">Live Updates</Badge>
+              <CardTitle className="dark:text-white">{t('recentActivity') || 'Recent Activity'}</CardTitle>
+              <Badge variant="outline" className="bg-white dark:bg-slate-800 dark:text-slate-200">Live Updates</Badge>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -305,12 +307,12 @@ export default function AdminDashboard({ activeTab, user }: AdminDashboardProps)
                   <p className="text-sm text-slate-500 italic text-center py-8">No recent activity found.</p>
                 ) : (
                   recentActivities.map((activity, idx) => (
-                    <div key={idx} className="flex items-center gap-4 p-3 rounded-xl hover:bg-slate-50 transition-colors">
-                      <div className={`p-2 rounded-lg bg-white border border-slate-100 ${activity.color}`}>
+                    <div key={idx} className="flex items-center gap-4 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                      <div className={`p-2 rounded-lg bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-700 ${activity.color}`}>
                         <activity.icon className="h-4 w-4" />
                       </div>
                       <div className="flex-1">
-                        <p className="text-sm font-medium">
+                        <p className="text-sm font-medium dark:text-slate-200">
                           <span className="font-bold">{activity.user}</span> {activity.action}
                         </p>
                         <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">{activity.time}</p>
@@ -323,26 +325,26 @@ export default function AdminDashboard({ activeTab, user }: AdminDashboardProps)
           </Card>
 
           <div className="space-y-6">
-            <Card className="border-none shadow-sm">
+            <Card className="border-none shadow-sm dark:bg-slate-900">
               <CardHeader>
-                <CardTitle>Quick Management</CardTitle>
+                <CardTitle className="dark:text-white">{t('quickManagement') || 'Quick Management'}</CardTitle>
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-3">
-                <Button variant="outline" className="h-20 flex flex-col gap-2" onClick={() => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'users' }))}>
+                <Button variant="outline" className="h-20 flex flex-col gap-2 dark:border-slate-700 dark:hover:bg-slate-800" onClick={() => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'users' }))}>
                   <Users className="h-5 w-5 text-blue-500" />
-                  <span className="text-[10px] font-bold uppercase">Manage Users</span>
+                  <span className="text-[10px] font-bold uppercase">{t('manageUsers') || 'Manage Users'}</span>
                 </Button>
-                <Button variant="outline" className="h-20 flex flex-col gap-2" onClick={() => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'classes' }))}>
+                <Button variant="outline" className="h-20 flex flex-col gap-2 dark:border-slate-700 dark:hover:bg-slate-800" onClick={() => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'classes' }))}>
                   <BookOpen className="h-5 w-5 text-green-500" />
-                  <span className="text-[10px] font-bold uppercase">Manage Classes</span>
+                  <span className="text-[10px] font-bold uppercase">{t('manageClasses') || 'Manage Classes'}</span>
                 </Button>
-                <Button variant="outline" className="h-20 flex flex-col gap-2" onClick={() => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'exams' }))}>
+                <Button variant="outline" className="h-20 flex flex-col gap-2 dark:border-slate-700 dark:hover:bg-slate-800" onClick={() => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'exams' }))}>
                   <BrainCircuit className="h-5 w-5 text-purple-500" />
-                  <span className="text-[10px] font-bold uppercase">Manage Exams</span>
+                  <span className="text-[10px] font-bold uppercase">{t('manageExams') || 'Manage Exams'}</span>
                 </Button>
-                <Button variant="outline" className="h-20 flex flex-col gap-2" onClick={() => setIsAnnounceDialogOpen(true)}>
+                <Button variant="outline" className="h-20 flex flex-col gap-2 dark:border-slate-700 dark:hover:bg-slate-800" onClick={() => setIsAnnounceDialogOpen(true)}>
                   <Megaphone className="h-5 w-5 text-orange-500" />
-                  <span className="text-[10px] font-bold uppercase">New Announce</span>
+                  <span className="text-[10px] font-bold uppercase">{t('newAnnounce') || 'New Announce'}</span>
                 </Button>
               </CardContent>
             </Card>
@@ -1153,22 +1155,23 @@ export default function AdminDashboard({ activeTab, user }: AdminDashboardProps)
     return <ProfileManagement user={user} description="Manage your administrative profile and account settings" />;
   }
 
-  return <div className="text-slate-500 italic p-8 bg-white rounded-2xl border border-dashed border-slate-200 text-center">
+  return <div className="text-slate-500 italic p-8 bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 text-center">
     This module is under development.
   </div>;
 }
 
 function StatCard({ title, value, icon: Icon, color }: any) {
+  const { t } = useAppContext();
   return (
-    <Card className="border-none shadow-sm overflow-hidden">
+    <Card className="border-none shadow-sm overflow-hidden dark:bg-slate-900">
       <CardContent className="p-0">
         <div className="flex items-center p-6">
           <div className={`${color} p-4 rounded-2xl text-white mr-4`}>
             <Icon className="h-6 w-6" />
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-500">{title}</p>
-            <h3 className="text-2xl font-bold text-slate-900">{value}</h3>
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{t(title.toLowerCase().replace(' ', '')) || title}</p>
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{value}</h3>
           </div>
         </div>
       </CardContent>
