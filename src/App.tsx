@@ -4,11 +4,9 @@
  */
 
 import { useEffect, useState } from 'react';
-import { auth, db, UserProfile, OperationType, handleFirestoreError } from './lib/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { db, UserProfile, OperationType, handleFirestoreError, getStoredUserId, logout as firebaseLogout } from './lib/firebase';
+import { doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { Toaster } from './components/ui/sonner';
-import { toast } from 'sonner';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import Login from './pages/Login';
 import Dashboard from './components/Dashboard';
@@ -18,88 +16,48 @@ function AppContent() {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
+  const storedUserId = getStoredUserId();
 
-  const handleMockLogin = (mockUser: UserProfile) => {
-    setUser(mockUser);
-    toast.success(`Logged in as ${mockUser.role}`);
-    const path = mockUser.role === 'admin' ? '/admin/home' : mockUser.role === 'teacher' ? '/staff/home' : '/portal/home';
-    navigate(path);
+  const handleLogin = (loggedUser: UserProfile) => {
+    setUser(loggedUser);
+    const path = loggedUser.role === 'admin' ? '/admin/home' : loggedUser.role === 'teacher' ? '/staff/home' : '/portal/home';
+    navigate(path, { replace: true });
   };
 
   useEffect(() => {
     let userUnsubscribe: (() => void) | null = null;
 
-    const authUnsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        // Set up real-time listener for user profile
-        userUnsubscribe = onSnapshot(doc(db, 'users', firebaseUser.uid), async (userDoc) => {
-          if (userDoc.exists()) {
-            const userData = userDoc.data() as UserProfile;
-            // Force admin role if email matches hardcoded admin email
-            if (firebaseUser.email === 'dattabarsha9@gmail.com' && userData.role !== 'admin') {
-              try {
-                await updateDoc(doc(db, 'users', firebaseUser.uid), { role: 'admin' });
-                // Snapshot listener will trigger again with updated data
-              } catch (error) {
-                console.error("Failed to auto-upgrade to admin:", error);
-                setUser(userData);
-                setLoading(false);
-              }
-            } else {
-              setUser(userData);
-              setLoading(false);
-              
-              // Handle redirection if on login page or root
-              if (location.pathname === '/login' || location.pathname === '/') {
-                const path = userData.role === 'admin' ? '/admin/home' : userData.role === 'teacher' ? '/staff/home' : '/portal/home';
-                navigate(path);
-              }
-            }
-          } else {
-            // New user - check if there's a pending role from registration
-            const pendingRole = localStorage.getItem('pending_role') as 'admin' | 'teacher' | 'student' | null;
-            localStorage.removeItem('pending_role');
-            
-            const isAdmin = firebaseUser.email === 'dattabarsha9@gmail.com';
-            const newUser: UserProfile = {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email || '',
-              name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Anonymous',
-              role: isAdmin ? 'admin' : (pendingRole || 'student'),
-              createdAt: new Date().toISOString(),
-              photoURL: firebaseUser.photoURL || undefined,
-            };
-            try {
-              await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
-            } catch (error) {
-              handleFirestoreError(error, OperationType.CREATE, `users/${firebaseUser.uid}`);
-              toast.error("Failed to create user profile");
-              setLoading(false);
-            }
-          }
-        }, (error) => {
-          handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
-          toast.error("Failed to load user profile");
+    if (storedUserId) {
+      // Set up real-time listener for user profile from Firestore using stored ID
+      userUnsubscribe = onSnapshot(doc(db, 'users', storedUserId), (userDoc) => {
+        if (userDoc.exists()) {
+          const userData = userDoc.data() as UserProfile;
+          setUser(userData);
           setLoading(false);
-        });
-      } else {
-        if (userUnsubscribe) {
-          userUnsubscribe();
-          userUnsubscribe = null;
+          
+          if (location.pathname === '/login' || location.pathname === '/') {
+            const path = userData.role === 'admin' ? '/admin/home' : userData.role === 'teacher' ? '/staff/home' : '/portal/home';
+            navigate(path, { replace: true });
+          }
+        } else {
+          // User session in localStorage but document doesn't exist? (Maybe deleted)
+          firebaseLogout();
+          setUser(null);
+          setLoading(false);
         }
-        setUser(null);
+      }, (error) => {
+        console.error("Profile listen error:", error);
         setLoading(false);
-        if (location.pathname !== '/login') {
-          navigate('/login');
-        }
-      }
-    });
+      });
+    } else {
+      setUser(null);
+      setLoading(false);
+    }
 
     return () => {
-      authUnsubscribe();
       if (userUnsubscribe) userUnsubscribe();
     };
-  }, [navigate, location.pathname]);
+  }, [navigate, storedUserId]); 
 
   if (loading) {
     return (
@@ -112,7 +70,7 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-slate-50 font-sans antialiased">
       <Routes>
-        <Route path="/login" element={user ? <Navigate to={user.role === 'admin' ? '/admin/home' : user.role === 'teacher' ? '/staff/home' : '/portal/home'} /> : <Login onMockLogin={handleMockLogin} />} />
+        <Route path="/login" element={user ? <Navigate to={user.role === 'admin' ? '/admin/home' : user.role === 'teacher' ? '/staff/home' : '/portal/home'} /> : <Login onLogin={handleLogin} onMockLogin={handleLogin} />} />
         
         {/* Admin Routes */}
         <Route path="/admin/*" element={user?.role === 'admin' ? <Dashboard user={user} /> : <Navigate to="/login" />} />

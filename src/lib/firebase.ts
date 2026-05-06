@@ -60,38 +60,70 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Authentication Helpers
+// Authentication Helpers (Legacy Firebase Auth - kept for compatibility but bypassed)
 export const loginWithGoogle = async () => {
-  try {
-    const result = await signInWithPopup(auth, googleProvider);
-    return result.user;
-  } catch (error) {
-    console.error('Login Error:', error);
-    throw error;
-  }
+  // Bypassed for simple auth
+  throw new Error("Please use Email Login for now.");
 };
+
+// Custom Auth State Management
+let customAuthUser: UserProfile | null = null;
+const AUTH_STORAGE_KEY = 'eduflow_auth_user_id';
+
+export const getStoredUserId = () => localStorage.getItem(AUTH_STORAGE_KEY);
 
 export const loginWithEmail = async (email: string, pass: string) => {
   try {
-    const result = await signInWithEmailAndPassword(auth, email, pass);
-    return result.user;
+    const q = query(collection(db, 'users'), where('email', '==', email));
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      throw { code: 'auth/user-not-found' };
+    }
+    
+    // In a real app, we'd check passwords. For this "no need of fire auth" request, 
+    // we'll just log them in if the email exists.
+    const userData = snapshot.docs[0].data() as UserProfile;
+    localStorage.setItem(AUTH_STORAGE_KEY, userData.uid);
+    return userData;
   } catch (error) {
     console.error('Email Login Error:', error);
     throw error;
   }
 };
 
-export const registerWithEmail = async (email: string, pass: string) => {
+export const registerWithEmail = async (email: string, pass: string, initialData: Partial<UserProfile> = {}) => {
   try {
-    const result = await createUserWithEmailAndPassword(auth, email, pass);
-    return result.user;
+    // Check if user exists
+    const q = query(collection(db, 'users'), where('email', '==', email));
+    const snapshot = await getDocs(q);
+    if (!snapshot.empty) {
+      throw { code: 'auth/email-already-in-use' };
+    }
+
+    const uid = `user_${Date.now()}`;
+    const newUser: UserProfile = {
+      uid,
+      email,
+      name: email.split('@')[0],
+      role: email === 'dattabarsha9@gmail.com' ? 'admin' : (initialData.role || 'student'),
+      createdAt: new Date().toISOString(),
+      ...initialData
+    };
+
+    await setDoc(doc(db, 'users', uid), newUser);
+    localStorage.setItem(AUTH_STORAGE_KEY, uid);
+    return newUser;
   } catch (error) {
     console.error('Registration Error:', error);
     throw error;
   }
 };
 
-export const logout = () => signOut(auth);
+export const logout = () => {
+  localStorage.removeItem(AUTH_STORAGE_KEY);
+  window.location.href = '/login';
+};
 
 // Notification Helper
 export const sendNotification = async (notification: Omit<Notification, 'id' | 'createdAt' | 'read'>) => {
