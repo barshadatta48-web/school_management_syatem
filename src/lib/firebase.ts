@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, getDocs, Timestamp, addDoc } from 'firebase/firestore';
+import { getAuth, GoogleAuthProvider, signOut } from 'firebase/auth';
+import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, getDocs, addDoc } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
@@ -41,17 +41,12 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData.map(provider => ({
-        providerId: provider.providerId,
-        displayName: provider.displayName,
-        email: provider.email,
-        photoUrl: provider.photoURL
-      })) || []
+      userId: getStoredUserId() || undefined,
+      email: undefined,
+      emailVerified: undefined,
+      isAnonymous: undefined,
+      tenantId: undefined,
+      providerInfo: []
     },
     operationType,
     path
@@ -78,12 +73,12 @@ export const loginWithEmail = async (email: string, pass: string) => {
     const snapshot = await getDocs(q);
     
     if (snapshot.empty) {
-      throw { code: 'auth/user-not-found' };
+      throw new Error('User not found. Please sign up first.');
     }
     
-    // In a real app, we'd check passwords. For this "no need of fire auth" request, 
-    // we'll just log them in if the email exists.
     const userData = snapshot.docs[0].data() as UserProfile;
+    // In this "simple" mode, we're not strictly checking passwords via Auth
+    // but we'll assume the existence of the profile is enough for this demo request.
     localStorage.setItem(AUTH_STORAGE_KEY, userData.uid);
     return userData;
   } catch (error) {
@@ -94,14 +89,16 @@ export const loginWithEmail = async (email: string, pass: string) => {
 
 export const registerWithEmail = async (email: string, pass: string, initialData: Partial<UserProfile> = {}) => {
   try {
-    // Check if user exists
+    // Check if user already exists in Firestore
     const q = query(collection(db, 'users'), where('email', '==', email));
     const snapshot = await getDocs(q);
+    
     if (!snapshot.empty) {
-      throw { code: 'auth/email-already-in-use' };
+      throw new Error('Email already in use.');
     }
 
     const uid = `user_${Date.now()}`;
+    
     const newUser: UserProfile = {
       uid,
       email,

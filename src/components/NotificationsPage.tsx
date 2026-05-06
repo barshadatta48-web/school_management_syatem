@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { 
   db, 
-  auth, 
+  getStoredUserId, 
   Notification, 
   OperationType, 
   handleFirestoreError 
@@ -49,11 +49,12 @@ export default function NotificationsPage() {
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    if (!auth.currentUser) return;
+    const userId = getStoredUserId();
+    if (!userId) return;
 
     const q = query(
       collection(db, 'notifications'),
-      where('userId', '==', auth.currentUser.uid),
+      where('userId', '==', userId),
       orderBy('createdAt', 'desc')
     );
 
@@ -82,7 +83,8 @@ export default function NotificationsPage() {
   };
 
   const markAllAsRead = async () => {
-    if (!auth.currentUser) return;
+    const userId = getStoredUserId();
+    if (!userId) return;
     const batch = writeBatch(db);
     notifications.filter(n => !n.read).forEach(n => {
       batch.update(doc(db, 'notifications', n.id), { read: true });
@@ -105,7 +107,8 @@ export default function NotificationsPage() {
   };
 
   const clearAll = async () => {
-    if (!auth.currentUser || notifications.length === 0) return;
+    const userId = getStoredUserId();
+    if (!userId || notifications.length === 0) return;
     const batch = writeBatch(db);
     notifications.forEach(n => {
       batch.delete(doc(db, 'notifications', n.id));

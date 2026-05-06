@@ -43,13 +43,7 @@ export default function Login({ onLogin, onMockLogin }: LoginProps) {
       }
     } catch (error: any) {
       console.error("Auth error:", error);
-      if (error.code === 'auth/user-not-found') {
-        toast.error("User not found. Please check your email or Sign Up.");
-      } else if (error.code === 'auth/email-already-in-use') {
-        toast.error("Email already in use. Try logging in instead.");
-      } else {
-        toast.error("Auth failed. Please check your credentials.");
-      }
+      toast.error(error.message || "Auth failed. Please check your credentials.");
     } finally {
       setLoading(false);
     }

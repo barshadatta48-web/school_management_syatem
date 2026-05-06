@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Bell, Check, Info, AlertTriangle, XCircle, CheckCircle2, Trash2 } from 'lucide-react';
 import { 
   db, 
-  auth, 
+  getStoredUserId, 
   Notification, 
   OperationType, 
   handleFirestoreError 
@@ -32,11 +32,12 @@ export default function NotificationCenter() {
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    if (!auth.currentUser) return;
+    const userId = getStoredUserId();
+    if (!userId) return;
 
     const q = query(
       collection(db, 'notifications'),
-      where('userId', '==', auth.currentUser.uid),
+      where('userId', '==', userId),
       orderBy('createdAt', 'desc')
     );
 
@@ -64,7 +65,8 @@ export default function NotificationCenter() {
   };
 
   const markAllAsRead = async () => {
-    if (!auth.currentUser) return;
+    const userId = getStoredUserId();
+    if (!userId) return;
     const batch = writeBatch(db);
     notifications.filter(n => !n.read).forEach(n => {
       batch.update(doc(db, 'notifications', n.id), { read: true });

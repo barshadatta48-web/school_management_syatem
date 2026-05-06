@@ -16,7 +16,6 @@ function AppContent() {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
-  const storedUserId = getStoredUserId();
 
   const handleLogin = (loggedUser: UserProfile) => {
     setUser(loggedUser);
@@ -25,11 +24,11 @@ function AppContent() {
   };
 
   useEffect(() => {
-    let userUnsubscribe: (() => void) | null = null;
+    const storedUserId = getStoredUserId();
+    let profileUnsubscribe: (() => void) | null = null;
 
     if (storedUserId) {
-      // Set up real-time listener for user profile from Firestore using stored ID
-      userUnsubscribe = onSnapshot(doc(db, 'users', storedUserId), (userDoc) => {
+      profileUnsubscribe = onSnapshot(doc(db, 'users', storedUserId), (userDoc) => {
         if (userDoc.exists()) {
           const userData = userDoc.data() as UserProfile;
           setUser(userData);
@@ -40,10 +39,10 @@ function AppContent() {
             navigate(path, { replace: true });
           }
         } else {
-          // User session in localStorage but document doesn't exist? (Maybe deleted)
-          firebaseLogout();
+          // Profile document doesn't exist
           setUser(null);
           setLoading(false);
+          localStorage.removeItem('eduflow_auth_user_id');
         }
       }, (error) => {
         console.error("Profile listen error:", error);
@@ -55,9 +54,9 @@ function AppContent() {
     }
 
     return () => {
-      if (userUnsubscribe) userUnsubscribe();
+      if (profileUnsubscribe) profileUnsubscribe();
     };
-  }, [navigate, storedUserId]); 
+  }, [navigate]); 
 
   if (loading) {
     return (
